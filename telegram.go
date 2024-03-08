@@ -35,7 +35,7 @@ func handleTgCommands(bot *tgbotapi.BotAPI, db *sql.DB) {
 		args := update.Message.CommandArguments()
 
 		switch cmd {
-		case "help":
+		case "start", "help":
 			sendHelpMessage(bot, update.Message.Chat.ID)
 		case "pool_add":
 			handleAddPool(db, userID, args, bot, update.Message.Chat.ID)
@@ -107,7 +107,7 @@ func handleBalance(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64
 
 	var totalBalance int64
 	for _, poolID := range pools {
-		balance, err := getPoolBalanceFromDb(db, userID, poolID)
+		balance, err := getPoolBalance(poolID)
 		if err != nil {
 			log.Printf("Error getting pool balance: %v", err)
 			sendTgMessage(bot, chatID, "Error getting pool balance: "+err.Error())
