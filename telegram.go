@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -11,7 +12,7 @@ import (
 	"golang.org/x/text/message"
 )
 
-var cancelNotifyMap = make(map[string]chan struct{}) // Map to keep track of cancellation signals
+var cancelNotifyMap = make(map[string]context.CancelFunc)
 
 func sendTgMessage(bot *tgbotapi.BotAPI, chatID int64, message string) {
 	msg := tgbotapi.NewMessage(chatID, message)
@@ -132,69 +133,70 @@ func sendHelpMessage(bot *tgbotapi.BotAPI, chatID int64) {
 	sendTgMessage(bot, chatID, helpMessage)
 }
 
+func notifyBalanceChanges(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64, ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Stopping notification for user ", userID)
+			return
+		default:
+			pools, err := getPools(db, userID)
+			if err != nil {
+				log.Printf("Error getting pools: %v", err)
+				sendTgMessage(bot, chatID, "Error getting pools: "+err.Error())
+				return
+			}
+			for _, poolID := range pools {
+				new_balance, err := getPoolBalance(poolID)
+				if err != nil {
+					log.Printf("Error fetching balance: %v", err)
+					//sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+					continue
+				}
+				old_balance, err := getPoolBalanceFromDb(db, userID, poolID)
+				if err != nil {
+					log.Printf("Error fetching balance: %v", err)
+					//sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+					continue
+				}
+				if new_balance != old_balance {
+					err = updatePoolBalance(db, userID, poolID, new_balance)
+
+					p := message.NewPrinter(language.AmericanEnglish)
+					msg := p.Sprintf("Pool %s balance changed: %v ML", poolID, new_balance-old_balance)
+					sendTgMessage(bot, chatID, msg)
+					if err != nil {
+						log.Printf("Error updating balance: %v", err)
+						sendTgMessage(bot, chatID, "Error updating balance: "+err.Error())
+						return
+					}
+				}
+			}
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+}
 func handleNotifyBalanceChange(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
 	if _, exists := cancelNotifyMap[userID]; exists {
 		sendTgMessage(bot, chatID, "You're already subscribed to balance change notifications.")
 		return
 	}
-
-	cancelChannel := make(chan struct{})
-	cancelNotifyMap[userID] = cancelChannel
-
-	go func() {
-		defer delete(cancelNotifyMap, userID)
-		for {
-			select {
-			case <-cancelChannel:
-				return
-			default:
-				pools, err := getPools(db, userID)
-				if err != nil {
-					log.Printf("Error getting pools: %v", err)
-					sendTgMessage(bot, chatID, "Error getting pools: "+err.Error())
-					return
-				}
-				for _, poolID := range pools {
-					new_balance, err := getPoolBalance(poolID)
-					if err != nil {
-						log.Printf("Error fetching balance: %v", err)
-						sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
-						continue
-					}
-					old_balance, err := getPoolBalanceFromDb(db, userID, poolID)
-					if err != nil {
-						log.Printf("Error fetching balance: %v", err)
-						sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
-						continue
-					}
-					if new_balance != old_balance {
-						err = updatePoolBalance(db, userID, poolID, new_balance)
-
-						p := message.NewPrinter(language.AmericanEnglish)
-						msg := p.Sprintf("Your pool %s balance has changed for %v ML", poolID, new_balance-old_balance)
-						sendTgMessage(bot, chatID, msg)
-						if err != nil {
-							log.Printf("Error updating balance: %v", err)
-							sendTgMessage(bot, chatID, "Error updating balance: "+err.Error())
-							return
-						}
-					}
-				}
-
-				time.Sleep(120 * time.Second)
-			}
-		}
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	go notifyBalanceChanges(db, userID, bot, chatID, ctx)
+	cancelNotifyMap[userID] = cancel
 
 	sendTgMessage(bot, chatID, "You will now receive notifications for balance changes.")
 }
 
 func handleStopNotify(userID string, bot *tgbotapi.BotAPI, chatID int64) {
-	if cancelChannel, exists := cancelNotifyMap[userID]; exists {
-		close(cancelChannel)
-		cancelNotifyMap[userID] = nil
+	if cancelFunc, exists := cancelNotifyMap[userID]; exists {
+		log.Println("Stopping notification for user ", userID)
+		cancelFunc()
+		delete(cancelNotifyMap, userID)
 		sendTgMessage(bot, chatID, "Balance change notifications stopped.")
 	} else {
+		log.Println("User not subscribed to notifications: ", userID)
 		sendTgMessage(bot, chatID, "You're not subscribed to balance change notifications.")
 	}
 }
