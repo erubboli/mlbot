@@ -21,11 +21,11 @@ To set up the Mintlayer Telegram Bot, follow these steps:
 4. Run `go build` to compile the bot executable.
 5. Create a `config.json` file in the same directory as the executable with the following content:
 
-/```
+```
 {
   "bot_token": "<TELEGRAM_TOKEN_ID>"
 }
-/```
+```
 
 Replace `<TELEGRAM_TOKEN_ID>` with your actual bot token from Telegram.
 
