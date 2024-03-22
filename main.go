@@ -33,6 +33,7 @@ func main() {
 
 	db := initDB("pools.db")
 	defer db.Close()
+	recoverPastNotifications(bot, db)
 	go handleTgCommands(bot, db)
 
 	done := make(chan os.Signal, 1)

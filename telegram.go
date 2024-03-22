@@ -44,12 +44,70 @@ func handleTgCommands(bot *tgbotapi.BotAPI, db *sql.DB) {
 			handleRemovePool(db, userID, args, bot, update.Message.Chat.ID)
 		case "pool_list":
 			handleListPools(db, userID, bot, update.Message.Chat.ID)
+		case "delegation_add":
+			handleAddDelegation(db, userID, args, bot, update.Message.Chat.ID)
+		case "delegation_remove":
+			handleRemoveDelegation(db, userID, args, bot, update.Message.Chat.ID)
+		case "delegation_list":
+			handleListDelegations(db, userID, bot, update.Message.Chat.ID)
 		case "balance":
 			handleBalance(db, userID, bot, update.Message.Chat.ID)
 		case "notify_start":
 			handleNotifyBalanceChange(db, userID, bot, update.Message.Chat.ID)
 		case "notify_stop":
-			handleStopNotify(userID, bot, update.Message.Chat.ID)
+			handleStopNotify(db, userID, bot, update.Message.Chat.ID)
+		case "notify_status":
+			handleNotifyStatus(userID, bot, update.Message.Chat.ID)
+		}
+	}
+}
+
+func handleAddDelegation(db *sql.DB, userID, delegationID string, bot *tgbotapi.BotAPI, chatID int64) {
+	if delegationID == "" {
+		return
+	}
+	err := addDelegation(db, userID, delegationID)
+	if err != nil {
+		log.Printf("Error adding delegation: %v", err)
+		sendTgMessage(bot, chatID, "Error adding delegation: "+err.Error())
+	} else {
+		sendTgMessage(bot, chatID, "Delegation added")
+	}
+}
+
+func handleRemoveDelegation(db *sql.DB, userID, delegationID string, bot *tgbotapi.BotAPI, chatID int64) {
+	if delegationID == "" {
+		return
+	}
+	err := removeDelegation(db, userID, delegationID)
+	if err != nil {
+		log.Printf("Error removing delegation: %v", err)
+		sendTgMessage(bot, chatID, "Error removing delegation: "+err.Error())
+	} else {
+		sendTgMessage(bot, chatID, "Delegation removed")
+	}
+}
+
+func handleListDelegations(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
+	delegations, err := getDelegations(db, userID)
+	if err != nil {
+		log.Printf("Error listing delegations: %v", err)
+		sendTgMessage(bot, chatID, "Error listing delegations: "+err.Error())
+	} else {
+		if len(delegations) == 0 {
+			sendTgMessage(bot, chatID, "You have no delegations")
+		} else {
+			delegationMessage := "Your delegations:\n"
+			for _, delegationID := range delegations {
+				balance, err := getDelegationBalance(delegationID)
+				if err != nil {
+					log.Printf("Error getting delegation balance: %v", err)
+					sendTgMessage(bot, chatID, "Error getting delegation balance: "+err.Error())
+					return
+				}
+				delegationMessage += fmt.Sprintf("%v | %d ML \n", delegationID, balance)
+			}
+			sendTgMessage(bot, chatID, delegationMessage)
 		}
 	}
 }
@@ -90,8 +148,14 @@ func handleListPools(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int
 			sendTgMessage(bot, chatID, "You have no pools")
 		} else {
 			poolMessage := "Your pools:\n"
-			for _, pool := range pools {
-				poolMessage += "  " + pool + "\n"
+			for _, poolID := range pools {
+				balance, err := getPoolBalance(poolID)
+				if err != nil {
+					log.Printf("Error getting pool balance: %v", err)
+					sendTgMessage(bot, chatID, "Error getting pool balance: "+err.Error())
+					return
+				}
+				poolMessage += fmt.Sprintf("%v | %d ML \n", poolID, balance)
 			}
 			sendTgMessage(bot, chatID, poolMessage)
 		}
@@ -127,9 +191,14 @@ func sendHelpMessage(bot *tgbotapi.BotAPI, chatID int64) {
 		"/pool_add <poolID> - Add a pool\n" +
 		"/pool_remove <poolID> - Remove a pool\n" +
 		"/pool_list - List your pools\n" +
+		"/delegation_add <delegationID> - Add a delegation\n" +
+		"/delegation_remove <delegationID> - Remove a delegation\n" +
+		"/delegation_list - List your delegations\n" +
 		"/balance - Get the total balance of your pools\n" +
 		"/notify_start - Notify on balance change\n" +
-		"/notify_stop - Stop balance change notifications"
+		"/notify_stop - Stop balance change notifications\n" +
+		"/notify_status - Check if you're subscribed to balance change notifications\n" +
+		"/help - Show this message"
 	sendTgMessage(bot, chatID, helpMessage)
 }
 
@@ -140,44 +209,112 @@ func notifyBalanceChanges(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatI
 			log.Println("Stopping notification for user ", userID)
 			return
 		default:
-			pools, err := getPools(db, userID)
-			if err != nil {
-				log.Printf("Error getting pools: %v", err)
-				sendTgMessage(bot, chatID, "Error getting pools: "+err.Error())
-				return
-			}
-			for _, poolID := range pools {
-				new_balance, err := getPoolBalance(poolID)
-				if err != nil {
-					log.Printf("Error fetching balance: %v", err)
-					//sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
-					continue
-				}
-				old_balance, err := getPoolBalanceFromDb(db, userID, poolID)
-				if err != nil {
-					log.Printf("Error fetching balance: %v", err)
-					//sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
-					continue
-				}
-				if new_balance != old_balance {
-					err = updatePoolBalance(db, userID, poolID, new_balance)
-
-					p := message.NewPrinter(language.AmericanEnglish)
-					msg := p.Sprintf("Pool %s balance changed: %v ML", poolID, new_balance-old_balance)
-					sendTgMessage(bot, chatID, msg)
-					if err != nil {
-						log.Printf("Error updating balance: %v", err)
-						sendTgMessage(bot, chatID, "Error updating balance: "+err.Error())
-						return
-					}
-				}
-			}
+			go notifyPoolsBalanceChanges(db, userID, bot, chatID)
+			go notifyDelegationsBalanceChanges(db, userID, bot, chatID)
 			time.Sleep(10 * time.Second)
 		}
 	}
-
 }
+
+func notifyDelegationsBalanceChanges(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
+	delegations, err := getDelegations(db, userID)
+	if err != nil {
+		log.Printf("Error getting delegations: %v", err)
+		sendTgMessage(bot, chatID, "Error getting delegations: "+err.Error())
+		return
+	}
+
+	for _, delegationID := range delegations {
+		new_balance, err := getDelegationBalance(delegationID)
+		if err != nil {
+			log.Printf("Error fetching balance: %v", err)
+			sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+			continue
+		}
+		old_balance, err := getDelegationBalanceFromDb(db, userID, delegationID)
+		if err != nil {
+			log.Printf("Error fetching balance: %v", err)
+			sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+			continue
+		}
+		if new_balance != old_balance {
+			err = updateDelegationBalance(db, userID, delegationID, new_balance)
+
+			p := message.NewPrinter(language.AmericanEnglish)
+			msg := p.Sprintf("Delegation %s changed: %v ML", delegationID, new_balance-old_balance)
+			sendTgMessage(bot, chatID, msg)
+			if err != nil {
+				log.Printf("Error updating balance: %v", err)
+				sendTgMessage(bot, chatID, "Error updating balance: "+err.Error())
+				return
+			}
+		}
+	}
+}
+
+func notifyPoolsBalanceChanges(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
+	pools, err := getPools(db, userID)
+	if err != nil {
+		log.Printf("Error getting pools: %v", err)
+		sendTgMessage(bot, chatID, "Error getting pools: "+err.Error())
+		return
+	}
+
+	for _, poolID := range pools {
+		new_balance, err := getPoolBalance(poolID)
+		if err != nil {
+			log.Printf("Error fetching balance: %v", err)
+			sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+			continue
+		}
+		old_balance, err := getPoolBalanceFromDb(db, userID, poolID)
+		if err != nil {
+			log.Printf("Error fetching balance: %v", err)
+			sendTgMessage(bot, chatID, "Error fetching balance: "+err.Error())
+			continue
+		}
+		if new_balance != old_balance {
+			err = updatePoolBalance(db, userID, poolID, new_balance)
+
+			p := message.NewPrinter(language.AmericanEnglish)
+			msg := p.Sprintf("Pool %s changed: %v ML", poolID, new_balance-old_balance)
+			sendTgMessage(bot, chatID, msg)
+			if err != nil {
+				log.Printf("Error updating balance: %v", err)
+				sendTgMessage(bot, chatID, "Error updating balance: "+err.Error())
+				return
+			}
+		}
+	}
+}
+
+func recoverPastNotifications(bot *tgbotapi.BotAPI, db *sql.DB) {
+	notifications, err := getAllNotifications(db)
+
+	if err != nil {
+		log.Printf("Error getting notifications: %v", err)
+		return
+	}
+	log.Println("Recovering notifications, total: ", len(notifications))
+
+	for _, notification := range notifications {
+		log.Printf("Recovering notification for user %v, on chan %v \n", notification.UserID, notification.ChatID)
+		ctx, cancel := context.WithCancel(context.Background())
+		go notifyBalanceChanges(db, notification.UserID, bot, notification.ChatID, ctx)
+		cancelNotifyMap[notification.UserID] = cancel
+	}
+}
+
+func handleNotifyStatus(userID string, bot *tgbotapi.BotAPI, chatID int64) {
+	if _, exists := cancelNotifyMap[userID]; exists {
+		sendTgMessage(bot, chatID, "You're subscribed to balance change notifications.")
+	} else {
+		sendTgMessage(bot, chatID, "You're not subscribed to balance change notifications.")
+	}
+}
+
 func handleNotifyBalanceChange(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
+	addNotification(db, userID, chatID)
 	if _, exists := cancelNotifyMap[userID]; exists {
 		sendTgMessage(bot, chatID, "You're already subscribed to balance change notifications.")
 		return
@@ -189,11 +326,17 @@ func handleNotifyBalanceChange(db *sql.DB, userID string, bot *tgbotapi.BotAPI, 
 	sendTgMessage(bot, chatID, "You will now receive notifications for balance changes.")
 }
 
-func handleStopNotify(userID string, bot *tgbotapi.BotAPI, chatID int64) {
+func handleStopNotify(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64) {
 	if cancelFunc, exists := cancelNotifyMap[userID]; exists {
 		log.Println("Stopping notification for user ", userID)
 		cancelFunc()
 		delete(cancelNotifyMap, userID)
+		err := removeNotification(db, userID, chatID)
+		if err != nil {
+			log.Printf("Error removing notification: %v", err)
+			sendTgMessage(bot, chatID, "Error removing notification: "+err.Error())
+			return
+		}
 		sendTgMessage(bot, chatID, "Balance change notifications stopped.")
 	} else {
 		log.Println("User not subscribed to notifications: ", userID)
