@@ -170,7 +170,9 @@ func handleBalance(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64
 		return
 	}
 
-	var totalBalance int64
+	var poolsTotalBalance int64
+	var delegationsTotalBalance int64
+
 	for _, poolID := range pools {
 		balance, err := getPoolBalance(poolID)
 		if err != nil {
@@ -178,10 +180,30 @@ func handleBalance(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatID int64
 			sendTgMessage(bot, chatID, "Error getting pool balance: "+err.Error())
 			return
 		}
-		totalBalance += balance
+		poolsTotalBalance += balance
 	}
+
+	delegations, err := getDelegations(db, userID)
+	if err != nil {
+		log.Printf("Error getting delegations: %v", err)
+		sendTgMessage(bot, chatID, "Error getting delegations: "+err.Error())
+		return
+	}
+
+	for _, delegationID := range delegations {
+		balance, err := getDelegationBalance(delegationID)
+		if err != nil {
+			log.Printf("Error getting delegation balance: %v", err)
+			sendTgMessage(bot, chatID, "Error getting delegation balance: "+err.Error())
+			return
+		}
+		delegationsTotalBalance += balance
+	}
+
 	p := message.NewPrinter(language.AmericanEnglish)
-	msg := p.Sprintf("Total balance of your pools: %v ML", totalBalance)
+	msg := p.Sprintf("Total balance of your %v pools: %v ML", len(pools), poolsTotalBalance)
+	msg += "\n"
+	msg += p.Sprintf("Total balance of your %v delegations: %v ML", len(delegations), delegationsTotalBalance)
 
 	sendTgMessage(bot, chatID, msg)
 }

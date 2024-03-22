@@ -58,7 +58,7 @@ func getDelegationBalance(delegationID string) (int64, error) {
 		return 0, err
 	}
 
-	atoms_balance := gjson.GetBytes(body, "staker_balance").Int()
+	atoms_balance := gjson.GetBytes(body, "balance").Int()
 	ml_balance := atoms_balance / PRECISION
 	return ml_balance, nil
 }
