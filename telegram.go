@@ -233,7 +233,7 @@ func notifyBalanceChanges(db *sql.DB, userID string, bot *tgbotapi.BotAPI, chatI
 		default:
 			go notifyPoolsBalanceChanges(db, userID, bot, chatID)
 			go notifyDelegationsBalanceChanges(db, userID, bot, chatID)
-			time.Sleep(10 * time.Second)
+			time.Sleep(10 * time.Minute)
 		}
 	}
 }
