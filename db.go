@@ -53,6 +53,8 @@ func initDB(filePath string) *sql.DB {
 		userID TEXT NOT NULL,
 		address TEXT NOT NULL,
 		balance INTEGER DEFAULT 0,
+		notify_on_change BOOLEAN DEFAULT FALSE,
+		threshold INT,		
 		UNIQUE(userID, address) ON CONFLICT IGNORE
 	)`)
 	if err != nil {
@@ -83,6 +85,27 @@ func getAllNotifications(db *sql.DB) ([]Notification, error) {
 		notifications = append(notifications, notification)
 	}
 	return notifications, nil
+}
+
+func addMonitoredAddress(db *sql.DB, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
+	_, err := db.Exec("INSERT INTO addresses (userID, address, threshold, notify_on_change) VALUES (?, ?, ?, ?)", userID, address, threshold, notifyOnChange)
+	if err != nil {
+		return err
+	}
+	if notifyOnChange {
+		err = addNotification(db, userID, chatID)
+	}
+	return err
+}
+
+func removeMonitoredAddress(db *sql.DB, userID, address string) error {
+	_, err := db.Exec("DELETE FROM addresses WHERE userID = ? AND address = ?", userID, address)
+	return err
+}
+
+func updateAddressBalance(db *sql.DB, userID, address string, balance int64) error {
+	_, err := db.Exec("UPDATE addresses SET balance = ? WHERE address = ? AND userID = ?", balance, address, userID)
+	return err
 }
 
 func addNotification(db *sql.DB, userID string, chatID int64) error {
