@@ -12,6 +12,7 @@ require (
 
 require (
 	github.com/btcsuite/btcutil v1.0.2 // indirect
+	github.com/go-telegram/bot v1.2.2 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 )

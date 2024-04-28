@@ -28,7 +28,7 @@ func getBlocks() (int64, error) {
 }
 
 func getPoolBalance(poolID string) (int64, error) {
-	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v1/pool/%s", poolID)
+	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v2/pool/%s", poolID)
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
@@ -40,13 +40,13 @@ func getPoolBalance(poolID string) (int64, error) {
 		return 0, err
 	}
 
-	atoms_balance := gjson.GetBytes(body, "staker_balance").Int()
+	atoms_balance := gjson.GetBytes(body, "staker_balance.atoms").Int()
 	ml_balance := atoms_balance / PRECISION
 	return ml_balance, nil
 }
 
 func getDelegationBalance(delegationID string) (int64, error) {
-	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v1/delegation/%s", delegationID)
+	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v2/delegation/%s", delegationID)
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
@@ -57,8 +57,7 @@ func getDelegationBalance(delegationID string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	atoms_balance := gjson.GetBytes(body, "balance").Int()
+	atoms_balance := gjson.GetBytes(body, "balance.atoms").Int()
 	ml_balance := atoms_balance / PRECISION
 	return ml_balance, nil
 }
