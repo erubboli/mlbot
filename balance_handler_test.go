@@ -48,6 +48,9 @@ func (f *fakeStore) AddNotification(ctx context.Context, userID string, chatID i
 func (f *fakeStore) RemoveNotification(ctx context.Context, userID string, chatID int64) error {
 	return nil
 }
+func (f *fakeStore) ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error {
+	return nil
+}
 func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) { return nil, nil }
 
 type fakeBalanceClient struct {

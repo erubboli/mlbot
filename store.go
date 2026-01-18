@@ -19,6 +19,7 @@ type Store interface {
 	UpdateDelegationBalance(ctx context.Context, userID, delegationID string, balance int64) error
 	AddNotification(ctx context.Context, userID string, chatID int64) error
 	RemoveNotification(ctx context.Context, userID string, chatID int64) error
+	ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error
 	GetAllNotifications(ctx context.Context) ([]Notification, error)
 }
 
@@ -105,14 +106,23 @@ func (s *SQLStore) Close() error {
 }
 
 func (s *SQLStore) AddMonitoredAddress(ctx context.Context, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
-	_, err := s.db.ExecContext(ctx, "INSERT INTO addresses (userID, address, threshold, notify_on_change) VALUES (?, ?, ?, ?)", userID, address, threshold, notifyOnChange)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if notifyOnChange {
-		return s.AddNotification(ctx, userID, chatID)
+	_, err = tx.ExecContext(ctx, "INSERT INTO addresses (userID, address, threshold, notify_on_change) VALUES (?, ?, ?, ?)", userID, address, threshold, notifyOnChange)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
 	}
-	return nil
+	if notifyOnChange {
+		stmt := tx.StmtContext(ctx, s.stmtAddNotification)
+		if _, err = stmt.ExecContext(ctx, userID, chatID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *SQLStore) AddPool(ctx context.Context, userID, poolID string) error {
@@ -197,6 +207,23 @@ func (s *SQLStore) AddNotification(ctx context.Context, userID string, chatID in
 func (s *SQLStore) RemoveNotification(ctx context.Context, userID string, chatID int64) error {
 	_, err := s.stmtRemoveNotification.ExecContext(ctx, userID, chatID)
 	return err
+}
+
+func (s *SQLStore) ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM notifications WHERE userID = ?", userID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	stmt := tx.StmtContext(ctx, s.stmtAddNotification)
+	if _, err := stmt.ExecContext(ctx, userID, chatID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLStore) GetAllNotifications(ctx context.Context) ([]Notification, error) {

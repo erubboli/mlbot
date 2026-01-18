@@ -48,11 +48,11 @@ func TestNotifyStartHandler(t *testing.T) {
 	client := &noopBalanceClient{}
 	app := NewApp(store, client, nil, NewNotificationManager())
 
-	started := make(chan struct{})
+	started := make(chan struct{}, 2)
 	var starts int32
 	app.startNotify = func(ctx context.Context, _ string, _ int64) {
 		atomic.AddInt32(&starts, 1)
-		close(started)
+		started <- struct{}{}
 		<-ctx.Done()
 	}
 
@@ -77,9 +77,14 @@ func TestNotifyStartHandler(t *testing.T) {
 	}
 
 	app.notifyStartHandler(context.Background(), nil, update)
+	select {
+	case <-started:
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for second notification routine to start")
+	}
 
-	if atomic.LoadInt32(&starts) != 1 {
-		t.Fatalf("expected 1 routine start, got %d", atomic.LoadInt32(&starts))
+	if atomic.LoadInt32(&starts) != 2 {
+		t.Fatalf("expected 2 routine starts, got %d", atomic.LoadInt32(&starts))
 	}
 	if len(messages) < 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -87,7 +92,7 @@ func TestNotifyStartHandler(t *testing.T) {
 	if messages[0] != "Notifications Active" {
 		t.Fatalf("unexpected first message: %q", messages[0])
 	}
-	if messages[1] != "Notification already Active" {
+	if messages[1] != "Notifications Updated" {
 		t.Fatalf("unexpected second message: %q", messages[1])
 	}
 

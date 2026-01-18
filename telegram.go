@@ -291,7 +291,17 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 	userID := fmt.Sprint(update.Message.From.ID)
 	chatID := update.Message.Chat.ID
 
-	a.store.AddNotification(ctx, userID, chatID)
+	if err := a.store.ReplaceNotificationsChannel(ctx, userID, chatID); err != nil {
+		log.Printf("Error updating notification channel: %v", err)
+		a.sendMessage(ctx, b, chatID, "Error updating notification channel: "+err.Error())
+		return
+	}
+
+	wasActive := a.notify.Active(userID)
+	if wasActive {
+		a.notify.Stop(userID)
+	}
+
 	if !a.notify.Start(ctx, userID, func(ctx context.Context) {
 		a.startNotify(ctx, userID, chatID)
 	}) {
@@ -299,7 +309,11 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	a.sendMessage(ctx, b, chatID, "Notifications Active")
+	if wasActive {
+		a.sendMessage(ctx, b, chatID, "Notifications Updated")
+	} else {
+		a.sendMessage(ctx, b, chatID, "Notifications Active")
+	}
 }
 
 func (a *App) notifyStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
