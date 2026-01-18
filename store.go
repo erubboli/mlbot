@@ -20,20 +20,22 @@ type Store interface {
 	AddNotification(ctx context.Context, userID string, chatID int64) error
 	RemoveNotification(ctx context.Context, userID string, chatID int64) error
 	ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error
+	RemoveNotificationsByChatID(ctx context.Context, chatID int64) error
 	GetAllNotifications(ctx context.Context) ([]Notification, error)
 }
 
 type SQLStore struct {
 	db *sql.DB
 
-	stmtAddNotification         *sql.Stmt
-	stmtRemoveNotification      *sql.Stmt
-	stmtGetPools                *sql.Stmt
-	stmtGetDelegations          *sql.Stmt
-	stmtGetPoolBalance          *sql.Stmt
-	stmtUpdatePoolBalance       *sql.Stmt
-	stmtGetDelegationBalance    *sql.Stmt
-	stmtUpdateDelegationBalance *sql.Stmt
+	stmtAddNotification             *sql.Stmt
+	stmtRemoveNotification          *sql.Stmt
+	stmtRemoveNotificationsByChatID *sql.Stmt
+	stmtGetPools                    *sql.Stmt
+	stmtGetDelegations              *sql.Stmt
+	stmtGetPoolBalance              *sql.Stmt
+	stmtUpdatePoolBalance           *sql.Stmt
+	stmtGetDelegationBalance        *sql.Stmt
+	stmtUpdateDelegationBalance     *sql.Stmt
 }
 
 func NewSQLStore(db *sql.DB) (*SQLStore, error) {
@@ -53,6 +55,10 @@ func (s *SQLStore) prepareStatements() error {
 		return err
 	}
 	s.stmtRemoveNotification, err = s.db.Prepare("DELETE FROM notifications WHERE userID = ? AND chatID = ?")
+	if err != nil {
+		return err
+	}
+	s.stmtRemoveNotificationsByChatID, err = s.db.Prepare("DELETE FROM notifications WHERE chatID = ?")
 	if err != nil {
 		return err
 	}
@@ -96,6 +102,7 @@ func (s *SQLStore) Close() error {
 
 	closeStmt(s.stmtAddNotification)
 	closeStmt(s.stmtRemoveNotification)
+	closeStmt(s.stmtRemoveNotificationsByChatID)
 	closeStmt(s.stmtGetPools)
 	closeStmt(s.stmtGetDelegations)
 	closeStmt(s.stmtGetPoolBalance)
@@ -206,6 +213,11 @@ func (s *SQLStore) AddNotification(ctx context.Context, userID string, chatID in
 
 func (s *SQLStore) RemoveNotification(ctx context.Context, userID string, chatID int64) error {
 	_, err := s.stmtRemoveNotification.ExecContext(ctx, userID, chatID)
+	return err
+}
+
+func (s *SQLStore) RemoveNotificationsByChatID(ctx context.Context, chatID int64) error {
+	_, err := s.stmtRemoveNotificationsByChatID.ExecContext(ctx, chatID)
 	return err
 }
 

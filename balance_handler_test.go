@@ -10,9 +10,10 @@ import (
 )
 
 type fakeStore struct {
-	pools         []string
-	delegations   []string
-	notifications []Notification
+	pools          []string
+	delegations    []string
+	notifications  []Notification
+	removeByChatID func(chatID int64) error
 }
 
 func (f *fakeStore) AddMonitoredAddress(ctx context.Context, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
@@ -50,6 +51,12 @@ func (f *fakeStore) RemoveNotification(ctx context.Context, userID string, chatI
 	return nil
 }
 func (f *fakeStore) ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error {
+	return nil
+}
+func (f *fakeStore) RemoveNotificationsByChatID(ctx context.Context, chatID int64) error {
+	if f.removeByChatID != nil {
+		return f.removeByChatID(chatID)
+	}
 	return nil
 }
 func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) {
@@ -95,8 +102,9 @@ func TestBalanceHandlerAggregatesBalances(t *testing.T) {
 	app := NewApp(store, client, nil, NewNotificationManager(), "")
 
 	var lastMessage string
-	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) {
+	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
 		lastMessage = message
+		return nil
 	}
 
 	update := &models.Update{

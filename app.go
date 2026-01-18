@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -14,7 +15,7 @@ type App struct {
 	bot         *bot.Bot
 	notify      *NotificationManager
 	adminUser   string
-	send        func(ctx context.Context, b *bot.Bot, chatID int64, message string)
+	send        func(ctx context.Context, b *bot.Bot, chatID int64, message string) error
 	startNotify func(ctx context.Context, userID string, chatID int64)
 }
 
@@ -33,13 +34,17 @@ func NewApp(store Store, client BalanceClient, b *bot.Bot, notify *NotificationM
 
 func (a *App) sendMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) {
 	if a.send != nil {
-		a.send(ctx, b, chatID, message)
+		if err := a.send(ctx, b, chatID, message); err != nil {
+			a.handleSendError(ctx, chatID, err)
+		}
 		return
 	}
-	defaultSendMessage(ctx, b, chatID, message)
+	if err := defaultSendMessage(ctx, b, chatID, message); err != nil {
+		a.handleSendError(ctx, chatID, err)
+	}
 }
 
-func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) {
+func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) error {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    chatID,
 		Text:      message,
@@ -47,5 +52,25 @@ func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message s
 	})
 	if err != nil {
 		log.Println("Error sending message: ", err)
+		return err
 	}
+	return nil
+}
+
+func (a *App) handleSendError(ctx context.Context, chatID int64, err error) {
+	if a.store == nil {
+		return
+	}
+	if !isChatUnreachableError(err) {
+		return
+	}
+	if cleanupErr := a.store.RemoveNotificationsByChatID(ctx, chatID); cleanupErr != nil {
+		log.Printf("Error removing notification for chat %d: %v", chatID, cleanupErr)
+	}
+}
+
+func isChatUnreachableError(err error) bool {
+	errText := strings.ToLower(err.Error())
+	return strings.Contains(errText, "chat not found") ||
+		strings.Contains(errText, "bot was blocked by the user")
 }

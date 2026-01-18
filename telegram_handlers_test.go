@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,8 +17,9 @@ func TestNotifyStatusHandler(t *testing.T) {
 	app := NewApp(store, client, nil, NewNotificationManager(), "42")
 
 	var lastMessage string
-	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) {
+	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
 		lastMessage = message
+		return nil
 	}
 
 	update := &models.Update{
@@ -57,8 +59,9 @@ func TestNotifyStartHandler(t *testing.T) {
 	}
 
 	var messages []string
-	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) {
+	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
 		messages = append(messages, message)
+		return nil
 	}
 
 	update := &models.Update{
@@ -112,9 +115,10 @@ func TestBroadcastHandler(t *testing.T) {
 
 	var sent []int64
 	var messages []string
-	app.send = func(ctx context.Context, _ *bot.Bot, chatID int64, message string) {
+	app.send = func(ctx context.Context, _ *bot.Bot, chatID int64, message string) error {
 		sent = append(sent, chatID)
 		messages = append(messages, message)
+		return nil
 	}
 
 	update := &models.Update{
@@ -136,6 +140,25 @@ func TestBroadcastHandler(t *testing.T) {
 	if messages[2] != "Broadcast sent" {
 		t.Fatalf("expected confirmation message, got %q", messages[2])
 	}
+}
+
+func TestSendMessageRemovesUnreachableChat(t *testing.T) {
+	store := &fakeStore{
+		removeByChatID: func(chatID int64) error {
+			if chatID != 555 {
+				t.Fatalf("unexpected chatID: %d", chatID)
+			}
+			return nil
+		},
+	}
+	client := &noopBalanceClient{}
+	app := NewApp(store, client, nil, NewNotificationManager(), "")
+
+	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
+		return errors.New("Bad Request: chat not found")
+	}
+
+	app.sendMessage(context.Background(), nil, 555, "test")
 }
 
 type noopBalanceClient struct{}
