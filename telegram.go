@@ -147,14 +147,17 @@ func (a *App) listPoolHandler(ctx context.Context, b *bot.Bot, update *models.Up
 		if len(pools) == 0 {
 			a.sendMessage(ctx, b, update.Message.Chat.ID, "You have no pools")
 		} else {
+			balances, err := runFetchMapWithLimit(pools, 10, func(poolID string) (int64, error) {
+				return a.client.GetPoolBalance(poolID)
+			})
+			if err != nil {
+				log.Printf("Error getting pool balance: %v", err)
+				a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pool balance: "+err.Error())
+				return
+			}
 			poolMessage := "Your pools:\n"
 			for _, poolID := range pools {
-				balance, err := a.client.GetPoolBalance(poolID)
-				if err != nil {
-					log.Printf("Error getting pool balance: %v", err)
-					a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pool balance: "+err.Error())
-					return
-				}
+				balance := balances[poolID]
 				if balance == 0 {
 					poolMessage += p.Sprintf("`%v`: `decommissioned` \n", poolID)
 				} else {
@@ -225,14 +228,17 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 		if len(delegations) == 0 {
 			a.sendMessage(ctx, b, update.Message.Chat.ID, "You have no delegations")
 		} else {
+			balances, err := runFetchMapWithLimit(delegations, 10, func(delegationID string) (int64, error) {
+				return a.client.GetDelegationBalance(delegationID)
+			})
+			if err != nil {
+				log.Printf("Error getting delegation balance: %v", err)
+				a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegation balance: "+err.Error())
+				return
+			}
 			delegationMessage := "Your delegations:\n"
 			for _, delegationID := range delegations {
-				balance, err := a.client.GetDelegationBalance(delegationID)
-				if err != nil {
-					log.Printf("Error getting delegation balance: %v", err)
-					a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegation balance: "+err.Error())
-					return
-				}
+				balance := balances[delegationID]
 				delegationMessage += p.Sprintf("`%v`: %v ML \n", delegationID, balance)
 			}
 			a.sendMessage(ctx, b, update.Message.Chat.ID, delegationMessage)
@@ -343,6 +349,42 @@ func runTasksWithLimit(ids []string, limit int, task func(id string)) {
 	}
 
 	wg.Wait()
+}
+
+func runFetchMapWithLimit(ids []string, limit int, fetch func(id string) (int64, error)) (map[string]int64, error) {
+	if len(ids) == 0 {
+		return map[string]int64{}, nil
+	}
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+		results  = make(map[string]int64, len(ids))
+	)
+	sem := make(chan struct{}, limit)
+
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			balance, err := fetch(id)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				return
+			}
+			results[id] = balance
+		}(id)
+	}
+
+	wg.Wait()
+	return results, firstErr
 }
 
 func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
