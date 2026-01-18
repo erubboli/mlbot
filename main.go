@@ -23,7 +23,10 @@ func main() {
 		log.Fatalf("Error reading config: %v", err)
 	}
 
-	db := initDB("pools.db")
+	db, err := initDB("pools.db")
+	if err != nil {
+		log.Fatalf("Error initializing database: %v", err)
+	}
 
 	log.Printf("Starting bot with token %s", config.BotToken)
 

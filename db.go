@@ -4,16 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/btcsuite/btcd/btcutil/bech32"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func initDB(filePath string) *sql.DB {
+func initDB(filePath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", filePath)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS notifications (
@@ -23,7 +22,8 @@ func initDB(filePath string) *sql.DB {
 		UNIQUE(userID, chatID) ON CONFLICT IGNORE
 	)`)
 	if err != nil {
-		log.Fatal(err)
+		_ = db.Close()
+		return nil, err
 	}
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS pools (
@@ -34,7 +34,8 @@ func initDB(filePath string) *sql.DB {
 		UNIQUE(userID, poolID) ON CONFLICT IGNORE
 	)`)
 	if err != nil {
-		log.Fatal(err)
+		_ = db.Close()
+		return nil, err
 	}
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS delegations (
@@ -45,7 +46,8 @@ func initDB(filePath string) *sql.DB {
 		UNIQUE(userID, delegationID) ON CONFLICT IGNORE
 	)`)
 	if err != nil {
-		log.Fatal(err)
+		_ = db.Close()
+		return nil, err
 	}
 
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS addresses (
@@ -58,10 +60,11 @@ func initDB(filePath string) *sql.DB {
 		UNIQUE(userID, address) ON CONFLICT IGNORE
 	)`)
 	if err != nil {
-		log.Fatal(err)
+		_ = db.Close()
+		return nil, err
 	}
 
-	return db
+	return db, nil
 }
 
 type Notification struct {
