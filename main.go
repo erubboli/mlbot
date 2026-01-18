@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -25,15 +24,12 @@ func main() {
 	}
 
 	db := initDB("pools.db")
-	defer db.Close()
 
 	log.Printf("Starting bot with token %s", config.BotToken)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
-	ctx = context.WithValue(ctx, "db", db)
-
-	defer cancel()
+	defer stop()
 	opts := []bot.Option{
 		bot.WithMiddlewares(showMessageWithUserName),
 		bot.WithDefaultHandler(handler),
@@ -44,16 +40,26 @@ func main() {
 		log.Panic(err)
 	}
 
-	b = registerHandlers(b)
-	recoverPastNotifications(ctx, b, db)
+	store := NewSQLStore(db)
+	client := &HTTPBalanceClient{}
+	app := NewApp(store, client, b, NewNotificationManager())
+	app.registerHandlers()
+	app.recoverPastNotifications(ctx)
 
-	b.Start(ctx)
+	botDone := make(chan struct{})
+	go func() {
+		b.Start(ctx)
+		close(botDone)
+	}()
 
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
-	fmt.Println("Blocking, press ctrl+c to continue...")
-	<-done // Will block here until user hits ctrl+c
+	<-ctx.Done()
+	stop()
 	log.Println("Shutting down...")
+	app.notify.StopAll()
+	<-botDone
+	if err := db.Close(); err != nil {
+		log.Printf("Error closing database: %v", err)
+	}
 }
 
 func showMessageWithUserName(next bot.HandlerFunc) bot.HandlerFunc {
