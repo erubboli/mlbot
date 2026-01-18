@@ -266,26 +266,32 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 		return
 	}
 
-	poolErr := runWithLimit(pools, 10, func(poolID string) (int64, error) {
-		return a.client.GetPoolBalance(poolID)
-	}, func(balance int64) {
-		poolsTotalBalance += balance
-	})
-	if poolErr != nil {
-		log.Printf("Error getting pool balance: %v", poolErr)
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pool balance: "+poolErr.Error())
-		return
-	}
+	errCh := make(chan error, 2)
 
-	delegationErr := runWithLimit(delegations, 10, func(delegationID string) (int64, error) {
-		return a.client.GetDelegationBalance(delegationID)
-	}, func(balance int64) {
-		delegationsTotalBalance += balance
-	})
-	if delegationErr != nil {
-		log.Printf("Error getting delegation balance: %v", delegationErr)
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegation balance: "+delegationErr.Error())
-		return
+	go func() {
+		poolErr := runWithLimit(pools, 10, func(poolID string) (int64, error) {
+			return a.client.GetPoolBalance(poolID)
+		}, func(balance int64) {
+			poolsTotalBalance += balance
+		})
+		errCh <- poolErr
+	}()
+
+	go func() {
+		delegationErr := runWithLimit(delegations, 10, func(delegationID string) (int64, error) {
+			return a.client.GetDelegationBalance(delegationID)
+		}, func(balance int64) {
+			delegationsTotalBalance += balance
+		})
+		errCh <- delegationErr
+	}()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			log.Printf("Error getting balance: %v", err)
+			a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting balance: "+err.Error())
+			return
+		}
 	}
 
 	p := message.NewPrinter(language.AmericanEnglish)
