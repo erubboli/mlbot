@@ -15,7 +15,13 @@ func TestSQLStoreRespectsContextCancel(t *testing.T) {
 		_ = db.Close()
 	})
 
-	store := NewSQLStore(db)
+	store, err := NewSQLStore(db)
+	if err != nil {
+		t.Fatalf("NewSQLStore failed: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

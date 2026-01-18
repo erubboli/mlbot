@@ -43,7 +43,15 @@ func main() {
 		log.Panic(err)
 	}
 
-	store := NewSQLStore(db)
+	store, err := NewSQLStore(db)
+	if err != nil {
+		log.Fatalf("Error preparing database statements: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			log.Printf("Error closing database statements: %v", err)
+		}
+	}()
 	client := &HTTPBalanceClient{}
 	app := NewApp(store, client, b, NewNotificationManager())
 	app.registerHandlers()
