@@ -52,7 +52,7 @@ func main() {
 			log.Printf("Error closing database statements: %v", err)
 		}
 	}()
-	client := &HTTPBalanceClient{}
+	client := NewHTTPBalanceClient(config.APIBaseURL)
 	app := NewApp(store, client, b, NewNotificationManager())
 	app.registerHandlers()
 	app.recoverPastNotifications(ctx)

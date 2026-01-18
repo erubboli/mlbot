@@ -8,10 +8,17 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const PRECISION = 100000000000
+const (
+	PRECISION         = 100000000000
+	defaultAPIBaseURL = "https://api-server.mintlayer.org"
+)
 
 func getBlocks() (int64, error) {
-	url := "https://api-server.mintlayer.org/api/v1/blocks"
+	return getBlocksWithBaseURL(defaultAPIBaseURL)
+}
+
+func getBlocksWithBaseURL(baseURL string) (int64, error) {
+	url := fmt.Sprintf("%s/api/v1/blocks", baseURL)
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
@@ -28,7 +35,11 @@ func getBlocks() (int64, error) {
 }
 
 func getPoolBalance(poolID string) (int64, error) {
-	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v2/pool/%s", poolID)
+	return getPoolBalanceWithBaseURL(defaultAPIBaseURL, poolID)
+}
+
+func getPoolBalanceWithBaseURL(baseURL, poolID string) (int64, error) {
+	url := fmt.Sprintf("%s/api/v2/pool/%s", baseURL, poolID)
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
@@ -46,7 +57,11 @@ func getPoolBalance(poolID string) (int64, error) {
 }
 
 func getDelegationBalance(delegationID string) (int64, error) {
-	url := fmt.Sprintf("https://api-server.mintlayer.org/api/v2/delegation/%s", delegationID)
+	return getDelegationBalanceWithBaseURL(defaultAPIBaseURL, delegationID)
+}
+
+func getDelegationBalanceWithBaseURL(baseURL, delegationID string) (int64, error) {
+	url := fmt.Sprintf("%s/api/v2/delegation/%s", baseURL, delegationID)
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, err
