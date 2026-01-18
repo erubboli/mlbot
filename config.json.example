@@ -1,4 +1,5 @@
 {
   "bot_token": "<TELEGRAM_TOKEN_ID>",
-  "api_base_url": "https://api-server.mintlayer.org"
+   "api_base_url": "https://api-server.mintlayer.org",
+   "admin_user": "<TELEGRAM_USER_ID>"
 }

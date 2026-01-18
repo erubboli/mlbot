@@ -13,16 +13,18 @@ type App struct {
 	client      BalanceClient
 	bot         *bot.Bot
 	notify      *NotificationManager
+	adminUser   string
 	send        func(ctx context.Context, b *bot.Bot, chatID int64, message string)
 	startNotify func(ctx context.Context, userID string, chatID int64)
 }
 
-func NewApp(store Store, client BalanceClient, b *bot.Bot, notify *NotificationManager) *App {
+func NewApp(store Store, client BalanceClient, b *bot.Bot, notify *NotificationManager, adminUser string) *App {
 	app := &App{
 		store:  store,
 		client: client,
 		bot:    b,
 		notify: notify,
+		adminUser: adminUser,
 	}
 	app.send = defaultSendMessage
 	app.startNotify = app.notifyBalanceChangesRoutine

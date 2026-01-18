@@ -10,8 +10,9 @@ import (
 )
 
 type fakeStore struct {
-	pools       []string
-	delegations []string
+	pools         []string
+	delegations   []string
+	notifications []Notification
 }
 
 func (f *fakeStore) AddMonitoredAddress(ctx context.Context, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
@@ -51,7 +52,9 @@ func (f *fakeStore) RemoveNotification(ctx context.Context, userID string, chatI
 func (f *fakeStore) ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error {
 	return nil
 }
-func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) { return nil, nil }
+func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) {
+	return f.notifications, nil
+}
 
 type fakeBalanceClient struct {
 	poolBalances       map[string]int64
@@ -89,7 +92,7 @@ func TestBalanceHandlerAggregatesBalances(t *testing.T) {
 			"d2": 2,
 		},
 	}
-	app := NewApp(store, client, nil, NewNotificationManager())
+	app := NewApp(store, client, nil, NewNotificationManager(), "")
 
 	var lastMessage string
 	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) {

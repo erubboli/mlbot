@@ -13,7 +13,7 @@ import (
 func TestNotifyStatusHandler(t *testing.T) {
 	store := &fakeStore{}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager())
+	app := NewApp(store, client, nil, NewNotificationManager(), "42")
 
 	var lastMessage string
 	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) {
@@ -46,7 +46,7 @@ func TestNotifyStatusHandler(t *testing.T) {
 func TestNotifyStartHandler(t *testing.T) {
 	store := &fakeStore{}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager())
+	app := NewApp(store, client, nil, NewNotificationManager(), "99")
 
 	started := make(chan struct{}, 2)
 	var starts int32
@@ -97,6 +97,45 @@ func TestNotifyStartHandler(t *testing.T) {
 	}
 
 	app.notify.StopAll()
+}
+
+func TestBroadcastHandler(t *testing.T) {
+	store := &fakeStore{
+		notifications: []Notification{
+			{UserID: "1", ChatID: 100},
+			{UserID: "2", ChatID: 200},
+			{UserID: "3", ChatID: 100},
+		},
+	}
+	client := &noopBalanceClient{}
+	app := NewApp(store, client, nil, NewNotificationManager(), "99")
+
+	var sent []int64
+	var messages []string
+	app.send = func(ctx context.Context, _ *bot.Bot, chatID int64, message string) {
+		sent = append(sent, chatID)
+		messages = append(messages, message)
+	}
+
+	update := &models.Update{
+		Message: &models.Message{
+			Text: "/broadcast hello everyone",
+			Chat: models.Chat{ID: 9},
+			From: &models.User{ID: 99},
+		},
+	}
+
+	app.broadcastHandler(context.Background(), nil, update)
+
+	if len(sent) != 3 {
+		t.Fatalf("expected 3 messages sent, got %d", len(sent))
+	}
+	if messages[0] != "hello everyone" || messages[1] != "hello everyone" {
+		t.Fatalf("unexpected broadcast content: %v", messages)
+	}
+	if messages[2] != "Broadcast sent" {
+		t.Fatalf("expected confirmation message, got %q", messages[2])
+	}
 }
 
 type noopBalanceClient struct{}

@@ -29,6 +29,7 @@ func (a *App) registerHandlers() {
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/notify_start", bot.MatchTypeContains, a.notifyStartHandler)
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/notify_stop", bot.MatchTypeContains, a.notifyStopHanlder)
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/notify_status", bot.MatchTypeContains, a.notifyStatusHandler)
+	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/broadcast", bot.MatchTypeContains, a.broadcastHandler)
 	//	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/address_add", bot.MatchTypeContains, a.addressAddHandler)
 }
 
@@ -46,6 +47,10 @@ func (a *App) helloHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 	helpMessage += "`/notify_start ` : *Notify on balance change*\n"
 	helpMessage += "`/notify_stop ` : *Stop balance change notifications*\n"
 	helpMessage += "`/notify_status ` : *Check if you're subscribed to balance change notifications*\n"
+	// if current user is admin, show these admin specific commands
+	if a.adminUser == fmt.Sprint(update.Message.From.ID) {
+		helpMessage += "`/broadcast <message>` : *Admin only: broadcast to notification channels*\n"
+	}
 
 	a.sendMessage(ctx, b, update.Message.Chat.ID, helpMessage)
 }
@@ -393,6 +398,31 @@ func runFetchMapWithLimit(ids []string, limit int, fetch func(id string) (int64,
 	return results, firstErr
 }
 
+func escapeMarkdownV2(input string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
+	)
+	return replacer.Replace(input)
+}
+
 func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := fmt.Sprint(update.Message.From.ID)
 	chatID := update.Message.Chat.ID
@@ -420,6 +450,45 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 	} else {
 		a.sendMessage(ctx, b, chatID, "Notifications Active")
 	}
+}
+
+func (a *App) broadcastHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := fmt.Sprint(update.Message.From.ID)
+	chatID := update.Message.Chat.ID
+
+	if a.adminUser == "" || userID != a.adminUser {
+		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		return
+	}
+
+	parts := strings.Fields(update.Message.Text)
+	if len(parts) < 2 {
+		a.sendMessage(ctx, b, chatID, "Usage: `/broadcast <message>`")
+		return
+	}
+	message := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/broadcast"))
+	if message == "" {
+		a.sendMessage(ctx, b, chatID, "Usage: `/broadcast <message>`")
+		return
+	}
+	message = escapeMarkdownV2(message)
+
+	notifications, err := a.store.GetAllNotifications(ctx)
+	if err != nil {
+		log.Printf("Error getting notifications: %v", err)
+		a.sendMessage(ctx, b, chatID, "Error fetching notification channels: "+err.Error())
+		return
+	}
+
+	seen := make(map[int64]struct{})
+	for _, notification := range notifications {
+		if _, exists := seen[notification.ChatID]; exists {
+			continue
+		}
+		seen[notification.ChatID] = struct{}{}
+		a.sendMessage(ctx, b, notification.ChatID, message)
+	}
+	a.sendMessage(ctx, b, chatID, "Broadcast sent")
 }
 
 func (a *App) notifyStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {

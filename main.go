@@ -53,7 +53,7 @@ func main() {
 		}
 	}()
 	client := NewHTTPBalanceClient(config.APIBaseURL)
-	app := NewApp(store, client, b, NewNotificationManager())
+	app := NewApp(store, client, b, NewNotificationManager(), config.AdminUser)
 	app.registerHandlers()
 	app.recoverPastNotifications(ctx)
 
