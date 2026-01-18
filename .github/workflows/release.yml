@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21.1"
+
+      - name: Build
+        run: go build -o mlbot ./...
+
+      - name: Package
+        run: |
+          tar -czf mlbot-linux-amd64.tar.gz mlbot
+          sha256sum mlbot-linux-amd64.tar.gz > sha256.txt
+          printf "SHA256:\n\n```\n" > release-notes.md
+          cat sha256.txt >> release-notes.md
+          printf "```\n" >> release-notes.md
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: mlbot-linux-amd64.tar.gz

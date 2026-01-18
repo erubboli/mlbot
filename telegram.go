@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -252,16 +253,6 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 	var poolsTotalBalance int64
 	var delegationsTotalBalance int64
 
-	for _, poolID := range pools {
-		balance, err := a.client.GetPoolBalance(poolID)
-		if err != nil {
-			log.Printf("Error getting pool balance: %v", err)
-			a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pool balance: "+err.Error())
-			return
-		}
-		poolsTotalBalance += balance
-	}
-
 	delegations, err := a.store.GetDelegations(ctx, fmt.Sprint(userID))
 	if err != nil {
 		log.Printf("Error getting delegations: %v", err)
@@ -269,14 +260,26 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 		return
 	}
 
-	for _, delegationID := range delegations {
-		balance, err := a.client.GetDelegationBalance(delegationID)
-		if err != nil {
-			log.Printf("Error getting delegation balance: %v", err)
-			a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegation balance: "+err.Error())
-			return
-		}
+	poolErr := runWithLimit(pools, 10, func(poolID string) (int64, error) {
+		return a.client.GetPoolBalance(poolID)
+	}, func(balance int64) {
+		poolsTotalBalance += balance
+	})
+	if poolErr != nil {
+		log.Printf("Error getting pool balance: %v", poolErr)
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pool balance: "+poolErr.Error())
+		return
+	}
+
+	delegationErr := runWithLimit(delegations, 10, func(delegationID string) (int64, error) {
+		return a.client.GetDelegationBalance(delegationID)
+	}, func(balance int64) {
 		delegationsTotalBalance += balance
+	})
+	if delegationErr != nil {
+		log.Printf("Error getting delegation balance: %v", delegationErr)
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegation balance: "+delegationErr.Error())
+		return
 	}
 
 	p := message.NewPrinter(language.AmericanEnglish)
@@ -285,6 +288,41 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 	msg += p.Sprintf("Total: `%v ML`", poolsTotalBalance+delegationsTotalBalance)
 
 	a.sendMessage(ctx, b, update.Message.Chat.ID, msg)
+}
+
+func runWithLimit(ids []string, limit int, fetch func(id string) (int64, error), add func(balance int64)) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
+	sem := make(chan struct{}, limit)
+
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			balance, err := fetch(id)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				return
+			}
+			add(balance)
+		}(id)
+	}
+
+	wg.Wait()
+	return firstErr
 }
 
 func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
