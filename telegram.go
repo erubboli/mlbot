@@ -325,6 +325,26 @@ func runWithLimit(ids []string, limit int, fetch func(id string) (int64, error),
 	return firstErr
 }
 
+func runTasksWithLimit(ids []string, limit int, task func(id string)) {
+	if len(ids) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, limit)
+
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			task(id)
+		}(id)
+	}
+
+	wg.Wait()
+}
+
 func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := fmt.Sprint(update.Message.From.ID)
 	chatID := update.Message.Chat.ID
@@ -412,7 +432,7 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 		return
 	}
 
-	for _, delegationID := range delegations {
+	runTasksWithLimit(delegations, 10, func(delegationID string) {
 		/*start := delegationID[:10]
 		end := delegationID[len(delegationID)-10:]
 		printableDelegationID := start + "..." + end*/
@@ -421,13 +441,13 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
-			continue
+			return
 		}
 		old_balance, err := a.store.GetDelegationBalance(ctx, userID, delegationID)
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
-			continue
+			return
 		}
 		if new_balance != old_balance {
 			err = a.store.UpdateDelegationBalance(ctx, userID, delegationID, new_balance)
@@ -444,7 +464,7 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 				return
 			}
 		}
-	}
+	})
 }
 
 func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chatID int64) {
@@ -455,7 +475,7 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 		return
 	}
 
-	for _, poolID := range pools {
+	runTasksWithLimit(pools, 10, func(poolID string) {
 		/*start := poolID[:10]
 		end := poolID[len(poolID)-10:]
 		printablePoolID := start + "..." + end*/
@@ -464,13 +484,13 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
-			continue
+			return
 		}
 		old_balance, err := a.store.GetPoolBalance(ctx, userID, poolID)
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
-			continue
+			return
 		}
 		if new_balance != old_balance {
 			err = a.store.UpdatePoolBalance(ctx, userID, poolID, new_balance)
@@ -488,7 +508,7 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 				return
 			}
 		}
-	}
+	})
 }
 
 func (a *App) recoverPastNotifications(ctx context.Context) {
