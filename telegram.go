@@ -78,7 +78,7 @@ func (a *App) addressAddHandler(ctx context.Context, b *bot.Bot, update *models.
 		}
 	}
 
-	err := a.store.AddMonitoredAddress(fmt.Sprint(userID), address, threshold, notifyOnChange, update.Message.Chat.ID)
+	err := a.store.AddMonitoredAddress(ctx, fmt.Sprint(userID), address, threshold, notifyOnChange, update.Message.Chat.ID)
 	if err != nil {
 		log.Printf("Error adding monitored address: %v", err)
 		a.sendMessage(ctx, b, chatID, "Error adding address for monitoring: "+err.Error())
@@ -103,7 +103,7 @@ func (a *App) addPoolHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 		return
 	}
 
-	err := a.store.AddPool(fmt.Sprint(userID), poolID)
+	err := a.store.AddPool(ctx, fmt.Sprint(userID), poolID)
 	if err != nil {
 		log.Printf("Error adding pool: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error adding pool: "+err.Error())
@@ -125,7 +125,7 @@ func (a *App) removePoolHandler(ctx context.Context, b *bot.Bot, update *models.
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Invalid pool ID")
 		return
 	}
-	err := a.store.RemovePool(fmt.Sprint(userID), poolID)
+	err := a.store.RemovePool(ctx, fmt.Sprint(userID), poolID)
 	if err != nil {
 		log.Printf("Error removing pool: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error removing pool: "+err.Error())
@@ -138,7 +138,7 @@ func (a *App) listPoolHandler(ctx context.Context, b *bot.Bot, update *models.Up
 	userID := update.Message.From.ID
 	p := message.NewPrinter(language.AmericanEnglish)
 
-	pools, err := a.store.GetPools(fmt.Sprint(userID))
+	pools, err := a.store.GetPools(ctx, fmt.Sprint(userID))
 	if err != nil {
 		log.Printf("Error listing pools: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error listing pools: "+err.Error())
@@ -179,7 +179,7 @@ func (a *App) addDelegationHandler(ctx context.Context, b *bot.Bot, update *mode
 		return
 	}
 
-	err := a.store.AddDelegation(fmt.Sprint(userID), delegationID)
+	err := a.store.AddDelegation(ctx, fmt.Sprint(userID), delegationID)
 	if err != nil {
 		log.Printf("Error adding delegation: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error adding delegation: "+err.Error())
@@ -203,7 +203,7 @@ func (a *App) removeDelegationHandler(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
-	err := a.store.RemoveDelegation(fmt.Sprint(userID), delegationID)
+	err := a.store.RemoveDelegation(ctx, fmt.Sprint(userID), delegationID)
 	if err != nil {
 		log.Printf("Error removing delegation: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error removing delegation: "+err.Error())
@@ -216,7 +216,7 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 	userID := update.Message.From.ID
 	p := message.NewPrinter(language.AmericanEnglish)
 
-	delegations, err := a.store.GetDelegations(fmt.Sprint(userID))
+	delegations, err := a.store.GetDelegations(ctx, fmt.Sprint(userID))
 	if err != nil {
 		log.Printf("Error listing delegations: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error listing delegations: "+err.Error())
@@ -242,7 +242,7 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := update.Message.From.ID
 
-	pools, err := a.store.GetPools(fmt.Sprint(userID))
+	pools, err := a.store.GetPools(ctx, fmt.Sprint(userID))
 	if err != nil {
 		log.Printf("Error getting pools: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting pools: "+err.Error())
@@ -262,7 +262,7 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 		poolsTotalBalance += balance
 	}
 
-	delegations, err := a.store.GetDelegations(fmt.Sprint(userID))
+	delegations, err := a.store.GetDelegations(ctx, fmt.Sprint(userID))
 	if err != nil {
 		log.Printf("Error getting delegations: %v", err)
 		a.sendMessage(ctx, b, update.Message.Chat.ID, "Error getting delegations: "+err.Error())
@@ -291,7 +291,7 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 	userID := fmt.Sprint(update.Message.From.ID)
 	chatID := update.Message.Chat.ID
 
-	a.store.AddNotification(userID, chatID)
+	a.store.AddNotification(ctx, userID, chatID)
 	if !a.notify.Start(ctx, userID, func(ctx context.Context) {
 		a.startNotify(ctx, userID, chatID)
 	}) {
@@ -317,7 +317,7 @@ func (a *App) notifyStopHanlder(ctx context.Context, b *bot.Bot, update *models.
 	chatID := update.Message.Chat.ID
 	if a.notify.Stop(userID) {
 		log.Println("Stopping notification for user ", userID)
-		err := a.store.RemoveNotification(userID, chatID)
+		err := a.store.RemoveNotification(ctx, userID, chatID)
 		if err != nil {
 			log.Printf("Error removing notification: %v", err)
 			a.sendMessage(ctx, b, chatID, "Error removing notification: "+err.Error())
@@ -353,7 +353,7 @@ func (a *App) notifyBalanceChangesRoutine(ctx context.Context, userID string, ch
 }
 
 func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string, chatID int64) {
-	delegations, err := a.store.GetDelegations(userID)
+	delegations, err := a.store.GetDelegations(ctx, userID)
 	if err != nil {
 		log.Printf("Error getting delegations: %v", err)
 		a.sendMessage(ctx, a.bot, chatID, "Error getting delegations: "+err.Error())
@@ -371,14 +371,14 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
 			continue
 		}
-		old_balance, err := a.store.GetDelegationBalance(userID, delegationID)
+		old_balance, err := a.store.GetDelegationBalance(ctx, userID, delegationID)
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
 			continue
 		}
 		if new_balance != old_balance {
-			err = a.store.UpdateDelegationBalance(userID, delegationID, new_balance)
+			err = a.store.UpdateDelegationBalance(ctx, userID, delegationID, new_balance)
 
 			p := message.NewPrinter(language.AmericanEnglish)
 			if new_balance >= old_balance {
@@ -396,7 +396,7 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 }
 
 func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chatID int64) {
-	pools, err := a.store.GetPools(userID)
+	pools, err := a.store.GetPools(ctx, userID)
 	if err != nil {
 		log.Printf("Error getting pools: %v", err)
 		a.sendMessage(ctx, a.bot, chatID, "Error getting pools: "+err.Error())
@@ -414,14 +414,14 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
 			continue
 		}
-		old_balance, err := a.store.GetPoolBalance(userID, poolID)
+		old_balance, err := a.store.GetPoolBalance(ctx, userID, poolID)
 		if err != nil {
 			log.Printf("Error fetching balance: %v", err)
 			a.sendMessage(ctx, a.bot, chatID, "Error fetching balance: "+err.Error())
 			continue
 		}
 		if new_balance != old_balance {
-			err = a.store.UpdatePoolBalance(userID, poolID, new_balance)
+			err = a.store.UpdatePoolBalance(ctx, userID, poolID, new_balance)
 
 			p := message.NewPrinter(language.AmericanEnglish)
 			if new_balance >= old_balance {
@@ -440,7 +440,7 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 }
 
 func (a *App) recoverPastNotifications(ctx context.Context) {
-	notifications, err := a.store.GetAllNotifications()
+	notifications, err := a.store.GetAllNotifications(ctx)
 
 	if err != nil {
 		log.Printf("Error getting notifications: %v", err)

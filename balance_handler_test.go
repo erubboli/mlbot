@@ -14,29 +14,41 @@ type fakeStore struct {
 	delegations []string
 }
 
-func (f *fakeStore) AddMonitoredAddress(userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
+func (f *fakeStore) AddMonitoredAddress(ctx context.Context, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
 	return nil
 }
 
-func (f *fakeStore) AddPool(userID, poolID string) error                      { return nil }
-func (f *fakeStore) RemovePool(userID, poolID string) error                   { return nil }
-func (f *fakeStore) GetPools(userID string) ([]string, error)                 { return f.pools, nil }
-func (f *fakeStore) AddDelegation(userID, delegationID string) error          { return nil }
-func (f *fakeStore) RemoveDelegation(userID, delegationID string) error       { return nil }
-func (f *fakeStore) GetDelegations(userID string) ([]string, error)           { return f.delegations, nil }
-func (f *fakeStore) GetPoolBalance(userID, poolID string) (int64, error)       { return 0, nil }
-func (f *fakeStore) UpdatePoolBalance(userID, poolID string, balance int64) error {
+func (f *fakeStore) AddPool(ctx context.Context, userID, poolID string) error    { return nil }
+func (f *fakeStore) RemovePool(ctx context.Context, userID, poolID string) error { return nil }
+func (f *fakeStore) GetPools(ctx context.Context, userID string) ([]string, error) {
+	return f.pools, nil
+}
+func (f *fakeStore) AddDelegation(ctx context.Context, userID, delegationID string) error { return nil }
+func (f *fakeStore) RemoveDelegation(ctx context.Context, userID, delegationID string) error {
 	return nil
 }
-func (f *fakeStore) GetDelegationBalance(userID, delegationID string) (int64, error) {
+func (f *fakeStore) GetDelegations(ctx context.Context, userID string) ([]string, error) {
+	return f.delegations, nil
+}
+func (f *fakeStore) GetPoolBalance(ctx context.Context, userID, poolID string) (int64, error) {
 	return 0, nil
 }
-func (f *fakeStore) UpdateDelegationBalance(userID, delegationID string, balance int64) error {
+func (f *fakeStore) UpdatePoolBalance(ctx context.Context, userID, poolID string, balance int64) error {
 	return nil
 }
-func (f *fakeStore) AddNotification(userID string, chatID int64) error    { return nil }
-func (f *fakeStore) RemoveNotification(userID string, chatID int64) error { return nil }
-func (f *fakeStore) GetAllNotifications() ([]Notification, error)         { return nil, nil }
+func (f *fakeStore) GetDelegationBalance(ctx context.Context, userID, delegationID string) (int64, error) {
+	return 0, nil
+}
+func (f *fakeStore) UpdateDelegationBalance(ctx context.Context, userID, delegationID string, balance int64) error {
+	return nil
+}
+func (f *fakeStore) AddNotification(ctx context.Context, userID string, chatID int64) error {
+	return nil
+}
+func (f *fakeStore) RemoveNotification(ctx context.Context, userID string, chatID int64) error {
+	return nil
+}
+func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) { return nil, nil }
 
 type fakeBalanceClient struct {
 	poolBalances       map[string]int64

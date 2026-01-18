@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -12,6 +13,11 @@ import (
 func initDB(filePath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", filePath)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := applyDBPragmas(db); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -67,13 +73,27 @@ func initDB(filePath string) (*sql.DB, error) {
 	return db, nil
 }
 
+func applyDBPragmas(db *sql.DB) error {
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA busy_timeout=5000",
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type Notification struct {
 	UserID string
 	ChatID int64
 }
 
-func getAllNotifications(db *sql.DB) ([]Notification, error) {
-	rows, err := db.Query("SELECT userID, chatID FROM notifications")
+func getAllNotificationsWithContext(ctx context.Context, db *sql.DB) ([]Notification, error) {
+	rows, err := db.QueryContext(ctx, "SELECT userID, chatID FROM notifications")
 	if err != nil {
 		return nil, err
 	}
@@ -90,38 +110,38 @@ func getAllNotifications(db *sql.DB) ([]Notification, error) {
 	return notifications, nil
 }
 
-func addMonitoredAddress(db *sql.DB, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
-	_, err := db.Exec("INSERT INTO addresses (userID, address, threshold, notify_on_change) VALUES (?, ?, ?, ?)", userID, address, threshold, notifyOnChange)
+func addMonitoredAddressWithContext(ctx context.Context, db *sql.DB, userID, address string, threshold int, notifyOnChange bool, chatID int64) error {
+	_, err := db.ExecContext(ctx, "INSERT INTO addresses (userID, address, threshold, notify_on_change) VALUES (?, ?, ?, ?)", userID, address, threshold, notifyOnChange)
 	if err != nil {
 		return err
 	}
 	if notifyOnChange {
-		err = addNotification(db, userID, chatID)
+		err = addNotificationWithContext(ctx, db, userID, chatID)
 	}
 	return err
 }
 
-func removeMonitoredAddress(db *sql.DB, userID, address string) error {
-	_, err := db.Exec("DELETE FROM addresses WHERE userID = ? AND address = ?", userID, address)
+func removeMonitoredAddressWithContext(ctx context.Context, db *sql.DB, userID, address string) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM addresses WHERE userID = ? AND address = ?", userID, address)
 	return err
 }
 
-func updateAddressBalance(db *sql.DB, userID, address string, balance int64) error {
-	_, err := db.Exec("UPDATE addresses SET balance = ? WHERE address = ? AND userID = ?", balance, address, userID)
+func updateAddressBalanceWithContext(ctx context.Context, db *sql.DB, userID, address string, balance int64) error {
+	_, err := db.ExecContext(ctx, "UPDATE addresses SET balance = ? WHERE address = ? AND userID = ?", balance, address, userID)
 	return err
 }
 
-func addNotification(db *sql.DB, userID string, chatID int64) error {
-	_, err := db.Exec("INSERT INTO notifications (userID, chatID) VALUES (?, ?)", userID, chatID)
+func addNotificationWithContext(ctx context.Context, db *sql.DB, userID string, chatID int64) error {
+	_, err := db.ExecContext(ctx, "INSERT INTO notifications (userID, chatID) VALUES (?, ?)", userID, chatID)
 	return err
 }
 
-func removeNotification(db *sql.DB, userID string, chatID int64) error {
-	_, err := db.Exec("DELETE FROM notifications WHERE userID = ? AND chatID = ?", userID, chatID)
+func removeNotificationWithContext(ctx context.Context, db *sql.DB, userID string, chatID int64) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM notifications WHERE userID = ? AND chatID = ?", userID, chatID)
 	return err
 }
 
-func addDelegation(db *sql.DB, userID, delegationID string) error {
+func addDelegationWithContext(ctx context.Context, db *sql.DB, userID, delegationID string) error {
 	hrp, _, err := bech32.Decode(delegationID)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -132,28 +152,28 @@ func addDelegation(db *sql.DB, userID, delegationID string) error {
 		return errors.New("this is not a delegation mainnet address")
 	}
 
-	_, err = db.Exec("INSERT INTO delegations (userID, delegationID, balance) VALUES (?, ?, 0)", userID, delegationID)
+	_, err = db.ExecContext(ctx, "INSERT INTO delegations (userID, delegationID, balance) VALUES (?, ?, 0)", userID, delegationID)
 	return err
 }
 
-func updateDelegationBalance(db *sql.DB, userID, delegationID string, balance int64) error {
-	_, err := db.Exec("UPDATE delegations SET balance = ? WHERE delegationID = ? AND userID = ?", balance, delegationID, userID)
+func updateDelegationBalanceWithContext(ctx context.Context, db *sql.DB, userID, delegationID string, balance int64) error {
+	_, err := db.ExecContext(ctx, "UPDATE delegations SET balance = ? WHERE delegationID = ? AND userID = ?", balance, delegationID, userID)
 	return err
 }
 
-func removeDelegation(db *sql.DB, userID, delegationID string) error {
-	_, err := db.Exec("DELETE FROM delegations WHERE userID = ? AND delegationID = ?", userID, delegationID)
+func removeDelegationWithContext(ctx context.Context, db *sql.DB, userID, delegationID string) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM delegations WHERE userID = ? AND delegationID = ?", userID, delegationID)
 	return err
 }
 
-func getDelegationBalanceFromDb(db *sql.DB, userID, delegationID string) (int64, error) {
+func getDelegationBalanceFromDbWithContext(ctx context.Context, db *sql.DB, userID, delegationID string) (int64, error) {
 	var balance int64
-	err := db.QueryRow("SELECT balance FROM delegations WHERE userID = ? AND delegationID = ?", userID, delegationID).Scan(&balance)
+	err := db.QueryRowContext(ctx, "SELECT balance FROM delegations WHERE userID = ? AND delegationID = ?", userID, delegationID).Scan(&balance)
 	return balance, err
 }
 
-func getDelegations(db *sql.DB, userID string) ([]string, error) {
-	rows, err := db.Query("SELECT delegationID FROM delegations WHERE userID = ?", userID)
+func getDelegationsWithContext(ctx context.Context, db *sql.DB, userID string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, "SELECT delegationID FROM delegations WHERE userID = ?", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +190,7 @@ func getDelegations(db *sql.DB, userID string) ([]string, error) {
 	return delegations, nil
 }
 
-func addPool(db *sql.DB, userID, poolID string) error {
+func addPoolWithContext(ctx context.Context, db *sql.DB, userID, poolID string) error {
 	hrp, _, err := bech32.Decode(poolID)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -181,28 +201,28 @@ func addPool(db *sql.DB, userID, poolID string) error {
 		return errors.New("this is not a pool mainnet address")
 	}
 
-	_, err = db.Exec("INSERT INTO pools (userID, poolID, balance) VALUES (?, ?, 0)", userID, poolID)
+	_, err = db.ExecContext(ctx, "INSERT INTO pools (userID, poolID, balance) VALUES (?, ?, 0)", userID, poolID)
 	return err
 }
 
-func updatePoolBalance(db *sql.DB, userID, poolID string, balance int64) error {
-	_, err := db.Exec("UPDATE pools SET balance = ? WHERE poolID = ? AND userID = ?", balance, poolID, userID)
+func updatePoolBalanceWithContext(ctx context.Context, db *sql.DB, userID, poolID string, balance int64) error {
+	_, err := db.ExecContext(ctx, "UPDATE pools SET balance = ? WHERE poolID = ? AND userID = ?", balance, poolID, userID)
 	return err
 }
 
-func removePool(db *sql.DB, userID, poolID string) error {
-	_, err := db.Exec("DELETE FROM pools WHERE userID = ? AND poolID = ?", userID, poolID)
+func removePoolWithContext(ctx context.Context, db *sql.DB, userID, poolID string) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM pools WHERE userID = ? AND poolID = ?", userID, poolID)
 	return err
 }
 
-func getPoolBalanceFromDb(db *sql.DB, userID, poolID string) (int64, error) {
+func getPoolBalanceFromDbWithContext(ctx context.Context, db *sql.DB, userID, poolID string) (int64, error) {
 	var balance int64
-	err := db.QueryRow("SELECT balance FROM pools WHERE userID = ? AND poolID = ?", userID, poolID).Scan(&balance)
+	err := db.QueryRowContext(ctx, "SELECT balance FROM pools WHERE userID = ? AND poolID = ?", userID, poolID).Scan(&balance)
 	return balance, err
 }
 
-func getPools(db *sql.DB, userID string) ([]string, error) {
-	rows, err := db.Query("SELECT poolID FROM pools WHERE userID = ?", userID)
+func getPoolsWithContext(ctx context.Context, db *sql.DB, userID string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, "SELECT poolID FROM pools WHERE userID = ?", userID)
 	if err != nil {
 		return nil, err
 	}
