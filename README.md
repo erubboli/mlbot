@@ -23,11 +23,13 @@ To set up the Mintlayer Telegram Bot, follow these steps:
 
 ```
 {
-  "bot_token": "<TELEGRAM_TOKEN_ID>"
+  "bot_token": "<TELEGRAM_TOKEN_ID>",
+  "api_base_url": "https://api-server.mintlayer.org",
+  "admin_user": "<TELEGRAM_USER_ID>"
 }
 ```
 
-Replace `<TELEGRAM_TOKEN_ID>` with your actual bot token from Telegram.
+Replace `<TELEGRAM_TOKEN_ID>` with your actual bot token from Telegram. Set `api_base_url` if you run a local api-server, otherwise keep the default. Set `admin_user` to your Telegram numeric user ID to enable admin-only commands like `/broadcast`.
 
 ### Generating Telegram Bot Token
 

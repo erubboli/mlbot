@@ -51,6 +51,17 @@ func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message s
 		ParseMode: models.ParseModeMarkdown,
 	})
 	if err != nil {
+		if isParseModeError(err) {
+			_, retryErr := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   message,
+			})
+			if retryErr == nil {
+				return nil
+			}
+			log.Println("Error sending message: ", retryErr)
+			return retryErr
+		}
 		log.Println("Error sending message: ", err)
 		return err
 	}
@@ -73,4 +84,9 @@ func isChatUnreachableError(err error) bool {
 	errText := strings.ToLower(err.Error())
 	return strings.Contains(errText, "chat not found") ||
 		strings.Contains(errText, "bot was blocked by the user")
+}
+
+func isParseModeError(err error) bool {
+	errText := strings.ToLower(err.Error())
+	return strings.Contains(errText, "can't parse entities")
 }

@@ -169,7 +169,7 @@ func (a *App) listPoolHandler(ctx context.Context, b *bot.Bot, update *models.Up
 					poolMessage += p.Sprintf("`%v`: %v ML \n", poolID, balance)
 				}
 			}
-			a.sendMessage(ctx, b, update.Message.Chat.ID, poolMessage)
+			a.sendLongMessage(ctx, b, update.Message.Chat.ID, poolMessage)
 		}
 	}
 }
@@ -246,7 +246,7 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 				balance := balances[delegationID]
 				delegationMessage += p.Sprintf("`%v`: %v ML \n", delegationID, balance)
 			}
-			a.sendMessage(ctx, b, update.Message.Chat.ID, delegationMessage)
+			a.sendLongMessage(ctx, b, update.Message.Chat.ID, delegationMessage)
 		}
 	}
 }
@@ -396,6 +396,60 @@ func runFetchMapWithLimit(ids []string, limit int, fetch func(id string) (int64,
 
 	wg.Wait()
 	return results, firstErr
+}
+
+func splitMessage(message string, limit int) []string {
+	if len(message) <= limit {
+		return []string{message}
+	}
+	lines := strings.Split(message, "\n")
+	var chunks []string
+	var current strings.Builder
+
+	flush := func() {
+		if current.Len() > 0 {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+	}
+
+	for _, line := range lines {
+		lineLen := len(line)
+		if lineLen > limit {
+			flush()
+			for start := 0; start < lineLen; start += limit {
+				end := start + limit
+				if end > lineLen {
+					end = lineLen
+				}
+				chunks = append(chunks, line[start:end])
+			}
+			continue
+		}
+
+		if current.Len() == 0 {
+			current.WriteString(line)
+			continue
+		}
+		if current.Len()+1+lineLen <= limit {
+			current.WriteString("\n")
+			current.WriteString(line)
+		} else {
+			flush()
+			current.WriteString(line)
+		}
+	}
+
+	flush()
+	return chunks
+}
+
+func (a *App) sendLongMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) {
+	const maxMessageSize = 3900
+	chunks := splitMessage(message, maxMessageSize)
+	for _, chunk := range chunks {
+		a.sendMessage(ctx, b, chatID, chunk)
+	}
 }
 
 func escapeMarkdownV2(input string) string {
