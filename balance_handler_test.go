@@ -59,6 +59,15 @@ func (f *fakeStore) RemoveNotificationsByChatID(ctx context.Context, chatID int6
 	}
 	return nil
 }
+func (f *fakeStore) GetNotificationChatIDs(ctx context.Context, userID string) ([]int64, error) {
+	var chatIDs []int64
+	for _, notification := range f.notifications {
+		if notification.UserID == userID {
+			chatIDs = append(chatIDs, notification.ChatID)
+		}
+	}
+	return chatIDs, nil
+}
 func (f *fakeStore) GetAllNotifications(ctx context.Context) ([]Notification, error) {
 	return f.notifications, nil
 }

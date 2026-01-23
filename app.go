@@ -49,6 +49,10 @@ func (a *App) sendMessage(ctx context.Context, b *bot.Bot, chatID int64, message
 	}
 }
 
+func (a *App) sendCommandError(ctx context.Context, b *bot.Bot, chatID int64) {
+	a.sendMessage(ctx, b, chatID, "Something went wrong. Please try again later.")
+}
+
 func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) error {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    chatID,

@@ -21,6 +21,7 @@ type Store interface {
 	RemoveNotification(ctx context.Context, userID string, chatID int64) error
 	ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error
 	RemoveNotificationsByChatID(ctx context.Context, chatID int64) error
+	GetNotificationChatIDs(ctx context.Context, userID string) ([]int64, error)
 	GetAllNotifications(ctx context.Context) ([]Notification, error)
 }
 
@@ -30,6 +31,7 @@ type SQLStore struct {
 	stmtAddNotification             *sql.Stmt
 	stmtRemoveNotification          *sql.Stmt
 	stmtRemoveNotificationsByChatID *sql.Stmt
+	stmtGetNotificationChatIDs      *sql.Stmt
 	stmtGetPools                    *sql.Stmt
 	stmtGetDelegations              *sql.Stmt
 	stmtGetPoolBalance              *sql.Stmt
@@ -59,6 +61,10 @@ func (s *SQLStore) prepareStatements() error {
 		return err
 	}
 	s.stmtRemoveNotificationsByChatID, err = s.db.Prepare("DELETE FROM notifications WHERE chatID = ?")
+	if err != nil {
+		return err
+	}
+	s.stmtGetNotificationChatIDs, err = s.db.Prepare("SELECT chatID FROM notifications WHERE userID = ?")
 	if err != nil {
 		return err
 	}
@@ -103,6 +109,7 @@ func (s *SQLStore) Close() error {
 	closeStmt(s.stmtAddNotification)
 	closeStmt(s.stmtRemoveNotification)
 	closeStmt(s.stmtRemoveNotificationsByChatID)
+	closeStmt(s.stmtGetNotificationChatIDs)
 	closeStmt(s.stmtGetPools)
 	closeStmt(s.stmtGetDelegations)
 	closeStmt(s.stmtGetPoolBalance)
@@ -219,6 +226,24 @@ func (s *SQLStore) RemoveNotification(ctx context.Context, userID string, chatID
 func (s *SQLStore) RemoveNotificationsByChatID(ctx context.Context, chatID int64) error {
 	_, err := s.stmtRemoveNotificationsByChatID.ExecContext(ctx, chatID)
 	return err
+}
+
+func (s *SQLStore) GetNotificationChatIDs(ctx context.Context, userID string) ([]int64, error) {
+	rows, err := s.stmtGetNotificationChatIDs.QueryContext(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chatIDs []int64
+	for rows.Next() {
+		var chatID int64
+		if err := rows.Scan(&chatID); err != nil {
+			return nil, err
+		}
+		chatIDs = append(chatIDs, chatID)
+	}
+	return chatIDs, nil
 }
 
 func (s *SQLStore) ReplaceNotificationsChannel(ctx context.Context, userID string, chatID int64) error {
