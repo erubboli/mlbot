@@ -492,7 +492,7 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 		a.notify.Stop(userID)
 	}
 
-	if !a.notify.Start(ctx, userID, func(ctx context.Context) {
+	if !a.notify.Start(a.appCtx, userID, func(ctx context.Context) {
 		a.startNotify(ctx, userID, chatID)
 	}) {
 		a.sendMessage(ctx, b, chatID, "Notification already Active")

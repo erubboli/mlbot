@@ -99,7 +99,7 @@ func TestBalanceHandlerAggregatesBalances(t *testing.T) {
 			"d2": 2,
 		},
 	}
-	app := NewApp(store, client, nil, NewNotificationManager(), "")
+	app := NewApp(store, client, nil, NewNotificationManager(), "", context.Background())
 
 	var lastMessage string
 	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {

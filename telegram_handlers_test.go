@@ -14,7 +14,7 @@ import (
 func TestNotifyStatusHandler(t *testing.T) {
 	store := &fakeStore{}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager(), "42")
+	app := NewApp(store, client, nil, NewNotificationManager(), "42", context.Background())
 
 	var lastMessage string
 	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
@@ -48,7 +48,7 @@ func TestNotifyStatusHandler(t *testing.T) {
 func TestNotifyStartHandler(t *testing.T) {
 	store := &fakeStore{}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager(), "99")
+	app := NewApp(store, client, nil, NewNotificationManager(), "99", context.Background())
 
 	started := make(chan struct{}, 2)
 	var starts int32
@@ -111,7 +111,7 @@ func TestBroadcastHandler(t *testing.T) {
 		},
 	}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager(), "99")
+	app := NewApp(store, client, nil, NewNotificationManager(), "99", context.Background())
 
 	var sent []int64
 	var messages []string
@@ -152,7 +152,7 @@ func TestSendMessageRemovesUnreachableChat(t *testing.T) {
 		},
 	}
 	client := &noopBalanceClient{}
-	app := NewApp(store, client, nil, NewNotificationManager(), "")
+	app := NewApp(store, client, nil, NewNotificationManager(), "", context.Background())
 
 	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
 		return errors.New("Bad Request: chat not found")
