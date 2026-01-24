@@ -30,6 +30,9 @@ func (a *App) registerHandlers() {
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/notify_stop", bot.MatchTypeContains, a.notifyStopHanlder)
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/notify_status", bot.MatchTypeContains, a.notifyStatusHandler)
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/broadcast", bot.MatchTypeContains, a.broadcastHandler)
+	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/debug_status", bot.MatchTypeContains, a.debugStatusHandler)
+	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/debug_stop", bot.MatchTypeContains, a.debugStopHandler)
+	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/debug_start", bot.MatchTypeContains, a.debugStartHandler)
 	//	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/address_add", bot.MatchTypeContains, a.addressAddHandler)
 }
 
@@ -50,6 +53,9 @@ func (a *App) helloHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 	// if current user is admin, show these admin specific commands
 	if a.adminUser == fmt.Sprint(update.Message.From.ID) {
 		helpMessage += "`/broadcast <message>` : *Admin only: broadcast to notification channels*\n"
+		helpMessage += "`/debug_status <user_id>` : *Admin only: notification status*\n"
+		helpMessage += "`/debug_stop <user_id>` : *Admin only: stop notifications*\n"
+		helpMessage += "`/debug_start <user_id> [chat_id]` : *Admin only: start notifications*\n"
 	}
 
 	a.sendMessage(ctx, b, update.Message.Chat.ID, helpMessage)
@@ -551,6 +557,125 @@ func (a *App) broadcastHandler(ctx context.Context, b *bot.Bot, update *models.U
 		a.sendMessage(ctx, b, notification.ChatID, message)
 	}
 	a.sendMessage(ctx, b, chatID, "Broadcast sent")
+}
+
+func (a *App) debugStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := fmt.Sprint(update.Message.From.ID)
+	chatID := update.Message.Chat.ID
+
+	if a.adminUser == "" || userID != a.adminUser {
+		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		return
+	}
+
+	parts := strings.Fields(update.Message.Text)
+	if len(parts) < 2 {
+		a.sendMessage(ctx, b, chatID, "Usage: `/debug_status <user_id>`")
+		return
+	}
+
+	targetUserID := parts[1]
+	chatIDs, err := a.store.GetNotificationChatIDs(ctx, targetUserID)
+	if err != nil {
+		log.Printf("Error getting notification channels: %v", err)
+		a.sendCommandError(ctx, b, chatID)
+		return
+	}
+
+	status := "inactive"
+	if a.notify.Active(targetUserID) {
+		status = "active"
+	}
+
+	msg := fmt.Sprintf("User %s: %s, channels=%d", targetUserID, status, len(chatIDs))
+	if len(chatIDs) > 0 {
+		msg += fmt.Sprintf(" (%v)", chatIDs)
+	}
+	a.sendMessage(ctx, b, chatID, msg)
+}
+
+func (a *App) debugStopHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := fmt.Sprint(update.Message.From.ID)
+	chatID := update.Message.Chat.ID
+
+	if a.adminUser == "" || userID != a.adminUser {
+		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		return
+	}
+
+	parts := strings.Fields(update.Message.Text)
+	if len(parts) < 2 {
+		a.sendMessage(ctx, b, chatID, "Usage: `/debug_stop <user_id>`")
+		return
+	}
+
+	targetUserID := parts[1]
+	if a.notify.Stop(targetUserID) {
+		a.sendMessage(ctx, b, chatID, "Notifications stopped")
+	} else {
+		a.sendMessage(ctx, b, chatID, "Notifications not active")
+	}
+}
+
+func (a *App) debugStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	userID := fmt.Sprint(update.Message.From.ID)
+	chatID := update.Message.Chat.ID
+
+	if a.adminUser == "" || userID != a.adminUser {
+		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		return
+	}
+
+	parts := strings.Fields(update.Message.Text)
+	if len(parts) < 2 {
+		a.sendMessage(ctx, b, chatID, "Usage: `/debug_start <user_id> [chat_id]`")
+		return
+	}
+
+	targetUserID := parts[1]
+	var targetChatID int64
+
+	if len(parts) >= 3 {
+		parsed, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			a.sendMessage(ctx, b, chatID, "Usage: `/debug_start <user_id> [chat_id]`")
+			return
+		}
+		targetChatID = parsed
+		if err := a.store.ReplaceNotificationsChannel(ctx, targetUserID, targetChatID); err != nil {
+			log.Printf("Error updating notification channel: %v", err)
+			a.sendCommandError(ctx, b, chatID)
+			return
+		}
+	} else {
+		chatIDs, err := a.store.GetNotificationChatIDs(ctx, targetUserID)
+		if err != nil {
+			log.Printf("Error getting notification channels: %v", err)
+			a.sendCommandError(ctx, b, chatID)
+			return
+		}
+		if len(chatIDs) == 0 {
+			a.sendMessage(ctx, b, chatID, "No notification channels found for user")
+			return
+		}
+		if len(chatIDs) > 1 {
+			a.sendMessage(ctx, b, chatID, "Multiple channels found; provide chat_id")
+			return
+		}
+		targetChatID = chatIDs[0]
+	}
+
+	if a.notify.Active(targetUserID) {
+		a.notify.Stop(targetUserID)
+	}
+	if !a.notify.Start(a.appCtx, targetUserID, func(ctx context.Context) {
+		a.startNotify(ctx, targetUserID, targetChatID)
+	}) {
+		a.sendMessage(ctx, b, chatID, "Notifications already active")
+		return
+	}
+
+	a.sendMessage(ctx, b, chatID, "Notifications started")
 }
 
 func (a *App) notifyStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {

@@ -161,6 +161,31 @@ func TestSendMessageRemovesUnreachableChat(t *testing.T) {
 	app.sendMessage(context.Background(), nil, 555, "test")
 }
 
+func TestDebugCommandsUnauthorized(t *testing.T) {
+	store := &fakeStore{}
+	client := &noopBalanceClient{}
+	app := NewApp(store, client, nil, NewNotificationManager(), "admin", context.Background())
+
+	var lastMessage string
+	app.send = func(ctx context.Context, _ *bot.Bot, _ int64, message string) error {
+		lastMessage = message
+		return nil
+	}
+
+	update := &models.Update{
+		Message: &models.Message{
+			Text: "/debug_status 123",
+			Chat: models.Chat{ID: 5},
+			From: &models.User{ID: 99},
+		},
+	}
+
+	app.debugStatusHandler(context.Background(), nil, update)
+	if lastMessage != "Unauthorized" {
+		t.Fatalf("expected Unauthorized, got %q", lastMessage)
+	}
+}
+
 type noopBalanceClient struct{}
 
 func (c *noopBalanceClient) GetPoolBalance(poolID string) (int64, error) {

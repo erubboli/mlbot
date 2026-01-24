@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"sync"
 )
 
@@ -21,16 +22,22 @@ func (m *NotificationManager) Start(ctx context.Context, userID string, start fu
 	m.mu.Lock()
 	if _, exists := m.entries[userID]; exists {
 		m.mu.Unlock()
+		log.Printf("Notification already active for user %s", userID)
 		return false
 	}
 	ctxIn, cancel := context.WithCancel(ctx)
 	m.entries[userID] = cancel
 	m.wg.Add(1)
 	m.mu.Unlock()
+	log.Printf("Starting notification for user %s", userID)
 
 	go func() {
 		defer m.wg.Done()
 		start(ctxIn)
+		m.mu.Lock()
+		delete(m.entries, userID)
+		m.mu.Unlock()
+		log.Printf("Notification routine exited for user %s", userID)
 	}()
 	return true
 }
@@ -50,6 +57,7 @@ func (m *NotificationManager) Stop(userID string) bool {
 	}
 	m.mu.Unlock()
 	if exists {
+		log.Printf("Stopping notification for user %s", userID)
 		cancel()
 	}
 	return exists
@@ -64,6 +72,9 @@ func (m *NotificationManager) StopAll() {
 	m.entries = make(map[string]context.CancelFunc)
 	m.mu.Unlock()
 
+	if len(cancels) > 0 {
+		log.Printf("Stopping all notifications (%d)", len(cancels))
+	}
 	for _, cancel := range cancels {
 		cancel()
 	}

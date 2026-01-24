@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -60,6 +63,30 @@ func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message s
 		ParseMode: models.ParseModeMarkdown,
 	})
 	if err != nil {
+		if retryAfter, ok := extractRetryAfter(err); ok {
+			time.Sleep(retryAfter)
+			_, retryErr := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID:    chatID,
+				Text:      message,
+				ParseMode: models.ParseModeMarkdown,
+			})
+			if retryErr == nil {
+				return nil
+			}
+			if isParseModeError(retryErr) {
+				_, retryPlainErr := b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID: chatID,
+					Text:   message,
+				})
+				if retryPlainErr == nil {
+					return nil
+				}
+				log.Println("Error sending message: ", retryPlainErr)
+				return retryPlainErr
+			}
+			log.Println("Error sending message: ", retryErr)
+			return retryErr
+		}
 		if isParseModeError(err) {
 			_, retryErr := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
@@ -98,4 +125,21 @@ func isChatUnreachableError(err error) bool {
 func isParseModeError(err error) bool {
 	errText := strings.ToLower(err.Error())
 	return strings.Contains(errText, "can't parse entities")
+}
+
+var retryAfterRegex = regexp.MustCompile(`retry after (\d+)`)
+
+func extractRetryAfter(err error) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+	matches := retryAfterRegex.FindStringSubmatch(strings.ToLower(err.Error()))
+	if len(matches) != 2 {
+		return 0, false
+	}
+	seconds, err := strconv.Atoi(matches[1])
+	if err != nil || seconds <= 0 {
+		return 0, false
+	}
+	return time.Duration(seconds) * time.Second, true
 }
