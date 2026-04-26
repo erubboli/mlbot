@@ -124,7 +124,7 @@ func TestBalanceHandlerAggregatesBalances(t *testing.T) {
 	}
 
 	app.balanceHandler(context.Background(), nil, update)
-	expected := "`2` pools: `5 ML`\n`2` delegations: `3 ML`\nTotal: `8 ML`"
+	expected := "💰 <b>Balance Summary</b>\n\n⛏️ Pools (2): <b>5 ML</b>\n🤝 Delegations (2): <b>3 ML</b>\n─────────────────\n📊 Total: <b>8 ML</b>"
 	if lastMessage != expected {
 		t.Fatalf("unexpected message:\nexpected: %q\ngot:      %q", expected, lastMessage)
 	}

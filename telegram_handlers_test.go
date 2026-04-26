@@ -30,8 +30,8 @@ func TestNotifyStatusHandler(t *testing.T) {
 	}
 
 	app.notifyStatusHandler(context.Background(), nil, update)
-	if lastMessage != "Not Subscribed" {
-		t.Fatalf("expected 'Not Subscribed', got %q", lastMessage)
+	if lastMessage != "❌ Not subscribed" {
+		t.Fatalf("expected '❌ Not subscribed', got %q", lastMessage)
 	}
 
 	app.notify.Start(context.Background(), "42", func(ctx context.Context) {
@@ -40,8 +40,8 @@ func TestNotifyStatusHandler(t *testing.T) {
 	t.Cleanup(app.notify.StopAll)
 
 	app.notifyStatusHandler(context.Background(), nil, update)
-	if lastMessage != "Subscribed" {
-		t.Fatalf("expected 'Subscribed', got %q", lastMessage)
+	if lastMessage != "🔔 Subscribed" {
+		t.Fatalf("expected '🔔 Subscribed', got %q", lastMessage)
 	}
 }
 
@@ -92,10 +92,10 @@ func TestNotifyStartHandler(t *testing.T) {
 	if len(messages) < 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
-	if messages[0] != "Notifications Active" {
+	if messages[0] != "🔔 Notifications started" {
 		t.Fatalf("unexpected first message: %q", messages[0])
 	}
-	if messages[1] != "Notifications Updated" {
+	if messages[1] != "🔔 Notifications updated" {
 		t.Fatalf("unexpected second message: %q", messages[1])
 	}
 
@@ -137,7 +137,7 @@ func TestBroadcastHandler(t *testing.T) {
 	if messages[0] != "hello everyone" || messages[1] != "hello everyone" {
 		t.Fatalf("unexpected broadcast content: %v", messages)
 	}
-	if messages[2] != "Broadcast sent" {
+	if messages[2] != "✅ Broadcast sent" {
 		t.Fatalf("expected confirmation message, got %q", messages[2])
 	}
 }
@@ -181,7 +181,7 @@ func TestDebugCommandsUnauthorized(t *testing.T) {
 	}
 
 	app.debugStatusHandler(context.Background(), nil, update)
-	if lastMessage != "Unauthorized" {
+	if lastMessage != "🚫 Unauthorized" {
 		t.Fatalf("expected Unauthorized, got %q", lastMessage)
 	}
 }

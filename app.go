@@ -53,14 +53,14 @@ func (a *App) sendMessage(ctx context.Context, b *bot.Bot, chatID int64, message
 }
 
 func (a *App) sendCommandError(ctx context.Context, b *bot.Bot, chatID int64) {
-	a.sendMessage(ctx, b, chatID, "Something went wrong. Please try again later.")
+	a.sendMessage(ctx, b, chatID, "❌ Something went wrong. Please try again later.")
 }
 
 func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message string) error {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    chatID,
 		Text:      message,
-		ParseMode: models.ParseModeMarkdown,
+		ParseMode: models.ParseModeHTML,
 	})
 	if err != nil {
 		if retryAfter, ok := extractRetryAfter(err); ok {
@@ -68,7 +68,7 @@ func defaultSendMessage(ctx context.Context, b *bot.Bot, chatID int64, message s
 			_, retryErr := b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:    chatID,
 				Text:      message,
-				ParseMode: models.ParseModeMarkdown,
+				ParseMode: models.ParseModeHTML,
 			})
 			if retryErr == nil {
 				return nil

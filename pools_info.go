@@ -14,6 +14,7 @@ import (
 const (
 	PRECISION         = 100000000000
 	defaultAPIBaseURL = "https://api-server.mintlayer.org"
+	explorerBaseURL   = "https://explorer.mintlayer.org"
 )
 
 var httpClient = &http.Client{
@@ -41,48 +42,6 @@ func getBlocksWithBaseURL(baseURL string) (int64, error) {
 	return blocks, nil
 }
 
-func getPoolBalance(poolID string) (int64, error) {
-	return getPoolBalanceWithBaseURL(defaultAPIBaseURL, poolID)
-}
-
-func getPoolBalanceWithBaseURL(baseURL, poolID string) (int64, error) {
-	url := fmt.Sprintf("%s/api/v2/pool/%s", baseURL, poolID)
-	resp, err := getWithRetry(url, 3)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-
-	atoms_balance := gjson.GetBytes(body, "staker_balance.atoms").Int()
-	ml_balance := atoms_balance / PRECISION
-	return ml_balance, nil
-}
-
-func getDelegationBalance(delegationID string) (int64, error) {
-	return getDelegationBalanceWithBaseURL(defaultAPIBaseURL, delegationID)
-}
-
-func getDelegationBalanceWithBaseURL(baseURL, delegationID string) (int64, error) {
-	url := fmt.Sprintf("%s/api/v2/delegation/%s", baseURL, delegationID)
-	resp, err := getWithRetry(url, 3)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	atoms_balance := gjson.GetBytes(body, "balance.atoms").Int()
-	ml_balance := atoms_balance / PRECISION
-	return ml_balance, nil
-}
 
 func getWithRetry(url string, attempts int) (*http.Response, error) {
 	var lastErr error

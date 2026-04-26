@@ -13,6 +13,8 @@ require (
 require (
 	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/go-telegram/bot v1.2.2 // indirect
+	github.com/mintlayer/go-sdk v0.0.0-20260426110816-97165cf02de0 // indirect
+	github.com/tetratelabs/wazero v1.8.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 )

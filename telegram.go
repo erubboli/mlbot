@@ -15,6 +15,33 @@ import (
 	"golang.org/x/text/message"
 )
 
+func bold(s string) string              { return "<b>" + s + "</b>" }
+func code(s string) string              { return "<code>" + s + "</code>" }
+func htmlLink(text, url string) string  { return fmt.Sprintf(`<a href="%s">%s</a>`, url, text) }
+
+func shortID(id string) string {
+	if len(id) <= 16 {
+		return id
+	}
+	return id[:8] + "…" + id[len(id)-6:]
+}
+
+func poolLink(id string) string {
+	return htmlLink(shortID(id), explorerBaseURL+"/pool/"+id)
+}
+
+func delegationLink(id string) string {
+	return htmlLink(shortID(id), explorerBaseURL+"/delegation/"+id)
+}
+
+func escapeHTML(input string) string {
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+	).Replace(input)
+}
+
 func (a *App) registerHandlers() {
 	//hendle commands: pool_add
 	a.bot.RegisterHandler(bot.HandlerTypeMessageText, "/hello", bot.MatchTypeContains, a.helloHandler)
@@ -37,28 +64,29 @@ func (a *App) registerHandlers() {
 }
 
 func (a *App) helloHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
-	helpMessage := "Available commands:\n"
-	helpMessage += "`/help` : *this help message* \n"
-	//	helpMessage += "`/address_add <address> [threshold] ` : *Add a new address for monitoring*\n"
-	helpMessage += "`/pool_add <poolID> ` : *Add a pool*\n"
-	helpMessage += "`/pool_remove <poolID> ` : *Remove a pool*\n"
-	helpMessage += "`/pool_list ` : *List your pools*\n"
-	helpMessage += "`/delegation_add <delegationID> ` : *Add a delegation*\n"
-	helpMessage += "`/delegation_remove <delegationID> ` : *Remove a delegation*\n"
-	helpMessage += "`/delegation_list ` : *List your delegations*\n"
-	helpMessage += "`/balance ` : *Get the total balance of your pools*\n"
-	helpMessage += "`/notify_start ` : *Notify on balance change*\n"
-	helpMessage += "`/notify_stop ` : *Stop balance change notifications*\n"
-	helpMessage += "`/notify_status ` : *Check if you're subscribed to balance change notifications*\n"
-	// if current user is admin, show these admin specific commands
+	msg := "ℹ️ " + bold("Mintlayer Bot") + "\n\n"
+	msg += bold("⛏️ Pools") + "\n"
+	msg += "/pool_add — Add a pool\n"
+	msg += "/pool_remove — Remove a pool\n"
+	msg += "/pool_list — List your pools\n\n"
+	msg += bold("🤝 Delegations") + "\n"
+	msg += "/delegation_add — Add a delegation\n"
+	msg += "/delegation_remove — Remove a delegation\n"
+	msg += "/delegation_list — List your delegations\n\n"
+	msg += bold("💰 Balance") + "\n"
+	msg += "/balance — Get total balance\n\n"
+	msg += bold("🔔 Notifications") + "\n"
+	msg += "/notify_start — Subscribe to balance changes\n"
+	msg += "/notify_stop — Unsubscribe\n"
+	msg += "/notify_status — Check status\n"
 	if a.adminUser == fmt.Sprint(update.Message.From.ID) {
-		helpMessage += "`/broadcast <message>` : *Admin only: broadcast to notification channels*\n"
-		helpMessage += "`/debug_status <user_id>` : *Admin only: notification status*\n"
-		helpMessage += "`/debug_stop <user_id>` : *Admin only: stop notifications*\n"
-		helpMessage += "`/debug_start <user_id> [chat_id]` : *Admin only: start notifications*\n"
+		msg += "\n" + bold("🔧 Admin") + "\n"
+		msg += "/broadcast — Broadcast to all notification channels\n"
+		msg += "/debug_status — Notification status for a user\n"
+		msg += "/debug_stop — Stop notifications for a user\n"
+		msg += "/debug_start — Start notifications for a user\n"
 	}
-
-	a.sendMessage(ctx, b, update.Message.Chat.ID, helpMessage)
+	a.sendMessage(ctx, b, update.Message.Chat.ID, msg)
 }
 
 func (a *App) addressAddHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -105,13 +133,13 @@ func (a *App) addPoolHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
 		log.Printf("no parameters")
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: `/pool_add <poolID>`")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: /pool_add "+code("poolID"))
 		return
 	}
 
 	poolID := parts[1]
 	if !validateBech32Address(poolID) {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Invalid pool ID")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "❌ Invalid pool ID")
 		return
 	}
 
@@ -120,7 +148,7 @@ func (a *App) addPoolHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 		log.Printf("Error adding pool: %v", err)
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Pool added")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "✅ Pool added")
 	}
 }
 
@@ -128,13 +156,13 @@ func (a *App) removePoolHandler(ctx context.Context, b *bot.Bot, update *models.
 	userID := update.Message.From.ID
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: `/pool_remove <poolID>`")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: /pool_remove "+code("poolID"))
 		return
 	}
 
 	poolID := parts[1]
 	if !validateBech32Address(poolID) {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Invalid pool ID")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "❌ Invalid pool ID")
 		return
 	}
 	err := a.store.RemovePool(ctx, fmt.Sprint(userID), poolID)
@@ -142,7 +170,7 @@ func (a *App) removePoolHandler(ctx context.Context, b *bot.Bot, update *models.
 		log.Printf("Error removing pool: %v", err)
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Pool removed")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "🗑️ Pool removed")
 	}
 }
 
@@ -156,7 +184,7 @@ func (a *App) listPoolHandler(ctx context.Context, b *bot.Bot, update *models.Up
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
 		if len(pools) == 0 {
-			a.sendMessage(ctx, b, update.Message.Chat.ID, "You have no pools")
+			a.sendMessage(ctx, b, update.Message.Chat.ID, "⛏️ You have no pools yet. Add one with /pool_add")
 		} else {
 			balances, err := runFetchMapWithLimit(pools, 10, func(poolID string) (int64, error) {
 				return a.client.GetPoolBalance(poolID)
@@ -166,13 +194,13 @@ func (a *App) listPoolHandler(ctx context.Context, b *bot.Bot, update *models.Up
 				a.sendCommandError(ctx, b, update.Message.Chat.ID)
 				return
 			}
-			poolMessage := "Your pools:\n"
+			poolMessage := "⛏️ " + bold(fmt.Sprintf("Your Pools (%d)", len(pools))) + "\n\n"
 			for _, poolID := range pools {
 				balance := balances[poolID]
 				if balance == 0 {
-					poolMessage += p.Sprintf("`%v`: `decommissioned` \n", poolID)
+					poolMessage += "• " + poolLink(poolID) + "  💀 Decommissioned\n"
 				} else {
-					poolMessage += p.Sprintf("`%v`: %v ML \n", poolID, balance)
+					poolMessage += p.Sprintf("• %s  💰 %v ML\n", poolLink(poolID), balance)
 				}
 			}
 			a.sendLongMessage(ctx, b, update.Message.Chat.ID, poolMessage)
@@ -184,13 +212,13 @@ func (a *App) addDelegationHandler(ctx context.Context, b *bot.Bot, update *mode
 	userID := update.Message.From.ID
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: `/delegation_add <delegationID>`")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: /delegation_add "+code("delegationID"))
 		return
 	}
 
 	delegationID := parts[1]
 	if !validateBech32Address(delegationID) {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Invalid delegation ID")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "❌ Invalid delegation ID")
 		return
 	}
 
@@ -199,7 +227,7 @@ func (a *App) addDelegationHandler(ctx context.Context, b *bot.Bot, update *mode
 		log.Printf("Error adding delegation: %v", err)
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Delegation added")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "✅ Delegation added")
 	}
 }
 
@@ -207,14 +235,14 @@ func (a *App) removeDelegationHandler(ctx context.Context, b *bot.Bot, update *m
 	userID := update.Message.From.ID
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: `/delegation_remove <delegationID>`")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "Usage: /delegation_remove "+code("delegationID"))
 		return
 	}
 
 	delegationID := parts[1]
 
 	if !validateBech32Address(delegationID) {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Invalid delegation ID")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "❌ Invalid delegation ID")
 		return
 	}
 
@@ -223,7 +251,7 @@ func (a *App) removeDelegationHandler(ctx context.Context, b *bot.Bot, update *m
 		log.Printf("Error removing delegation: %v", err)
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
-		a.sendMessage(ctx, b, update.Message.Chat.ID, "Delegation removed")
+		a.sendMessage(ctx, b, update.Message.Chat.ID, "🗑️ Delegation removed")
 	}
 }
 
@@ -237,7 +265,7 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 		a.sendCommandError(ctx, b, update.Message.Chat.ID)
 	} else {
 		if len(delegations) == 0 {
-			a.sendMessage(ctx, b, update.Message.Chat.ID, "You have no delegations")
+			a.sendMessage(ctx, b, update.Message.Chat.ID, "🤝 You have no delegations yet. Add one with /delegation_add")
 		} else {
 			balances, err := runFetchMapWithLimit(delegations, 10, func(delegationID string) (int64, error) {
 				return a.client.GetDelegationBalance(delegationID)
@@ -247,10 +275,10 @@ func (a *App) listDelegationsHandler(ctx context.Context, b *bot.Bot, update *mo
 				a.sendCommandError(ctx, b, update.Message.Chat.ID)
 				return
 			}
-			delegationMessage := "Your delegations:\n"
+			delegationMessage := "🤝 " + bold(fmt.Sprintf("Your Delegations (%d)", len(delegations))) + "\n\n"
 			for _, delegationID := range delegations {
 				balance := balances[delegationID]
-				delegationMessage += p.Sprintf("`%v`: %v ML \n", delegationID, balance)
+				delegationMessage += p.Sprintf("• %s  💰 %v ML\n", delegationLink(delegationID), balance)
 			}
 			a.sendLongMessage(ctx, b, update.Message.Chat.ID, delegationMessage)
 		}
@@ -306,9 +334,11 @@ func (a *App) balanceHandler(ctx context.Context, b *bot.Bot, update *models.Upd
 	}
 
 	p := message.NewPrinter(language.AmericanEnglish)
-	msg := p.Sprintf("`%v` pools: `%v ML`\n", len(pools), poolsTotalBalance)
-	msg += p.Sprintf("`%v` delegations: `%v ML`\n", len(delegations), delegationsTotalBalance)
-	msg += p.Sprintf("Total: `%v ML`", poolsTotalBalance+delegationsTotalBalance)
+	msg := "💰 " + bold("Balance Summary") + "\n\n"
+	msg += fmt.Sprintf("⛏️ Pools (%d): %s\n", len(pools), bold(p.Sprintf("%v ML", poolsTotalBalance)))
+	msg += fmt.Sprintf("🤝 Delegations (%d): %s\n", len(delegations), bold(p.Sprintf("%v ML", delegationsTotalBalance)))
+	msg += "─────────────────\n"
+	msg += "📊 Total: " + bold(p.Sprintf("%v ML", poolsTotalBalance+delegationsTotalBalance))
 
 	a.sendMessage(ctx, b, update.Message.Chat.ID, msg)
 }
@@ -458,30 +488,6 @@ func (a *App) sendLongMessage(ctx context.Context, b *bot.Bot, chatID int64, mes
 	}
 }
 
-func escapeMarkdownV2(input string) string {
-	replacer := strings.NewReplacer(
-		"\\", "\\\\",
-		"_", "\\_",
-		"*", "\\*",
-		"[", "\\[",
-		"]", "\\]",
-		"(", "\\(",
-		")", "\\)",
-		"~", "\\~",
-		"`", "\\`",
-		">", "\\>",
-		"#", "\\#",
-		"+", "\\+",
-		"-", "\\-",
-		"=", "\\=",
-		"|", "\\|",
-		"{", "\\{",
-		"}", "\\}",
-		".", "\\.",
-		"!", "\\!",
-	)
-	return replacer.Replace(input)
-}
 
 func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := fmt.Sprint(update.Message.From.ID)
@@ -490,7 +496,7 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 	if a.notify.Active(userID) {
 		chatIDs, err := a.store.GetNotificationChatIDs(ctx, userID)
 		if err == nil && len(chatIDs) == 1 && chatIDs[0] == chatID {
-			a.sendMessage(ctx, b, chatID, "Notifications Active")
+			a.sendMessage(ctx, b, chatID, "🔔 Notifications already active")
 			return
 		}
 	}
@@ -509,14 +515,14 @@ func (a *App) notifyStartHandler(ctx context.Context, b *bot.Bot, update *models
 	if !a.notify.Start(a.appCtx, userID, func(ctx context.Context) {
 		a.startNotify(ctx, userID, chatID)
 	}) {
-		a.sendMessage(ctx, b, chatID, "Notification already Active")
+		a.sendMessage(ctx, b, chatID, "🔔 Notifications already active")
 		return
 	}
 
 	if wasActive {
-		a.sendMessage(ctx, b, chatID, "Notifications Updated")
+		a.sendMessage(ctx, b, chatID, "🔔 Notifications updated")
 	} else {
-		a.sendMessage(ctx, b, chatID, "Notifications Active")
+		a.sendMessage(ctx, b, chatID, "🔔 Notifications started")
 	}
 }
 
@@ -525,21 +531,21 @@ func (a *App) broadcastHandler(ctx context.Context, b *bot.Bot, update *models.U
 	chatID := update.Message.Chat.ID
 
 	if a.adminUser == "" || userID != a.adminUser {
-		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		a.sendMessage(ctx, b, chatID, "🚫 Unauthorized")
 		return
 	}
 
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, chatID, "Usage: `/broadcast <message>`")
+		a.sendMessage(ctx, b, chatID, "Usage: /broadcast "+code("message"))
 		return
 	}
 	message := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/broadcast"))
 	if message == "" {
-		a.sendMessage(ctx, b, chatID, "Usage: `/broadcast <message>`")
+		a.sendMessage(ctx, b, chatID, "Usage: /broadcast "+code("message"))
 		return
 	}
-	message = escapeMarkdownV2(message)
+	message = escapeHTML(message)
 
 	notifications, err := a.store.GetAllNotifications(ctx)
 	if err != nil {
@@ -556,7 +562,7 @@ func (a *App) broadcastHandler(ctx context.Context, b *bot.Bot, update *models.U
 		seen[notification.ChatID] = struct{}{}
 		a.sendMessage(ctx, b, notification.ChatID, message)
 	}
-	a.sendMessage(ctx, b, chatID, "Broadcast sent")
+	a.sendMessage(ctx, b, chatID, "✅ Broadcast sent")
 }
 
 func (a *App) debugStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -564,13 +570,13 @@ func (a *App) debugStatusHandler(ctx context.Context, b *bot.Bot, update *models
 	chatID := update.Message.Chat.ID
 
 	if a.adminUser == "" || userID != a.adminUser {
-		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		a.sendMessage(ctx, b, chatID, "🚫 Unauthorized")
 		return
 	}
 
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, chatID, "Usage: `/debug_status <user_id>`")
+		a.sendMessage(ctx, b, chatID, "Usage: /debug_status "+code("user_id"))
 		return
 	}
 
@@ -599,21 +605,21 @@ func (a *App) debugStopHandler(ctx context.Context, b *bot.Bot, update *models.U
 	chatID := update.Message.Chat.ID
 
 	if a.adminUser == "" || userID != a.adminUser {
-		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		a.sendMessage(ctx, b, chatID, "🚫 Unauthorized")
 		return
 	}
 
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, chatID, "Usage: `/debug_stop <user_id>`")
+		a.sendMessage(ctx, b, chatID, "Usage: /debug_stop "+code("user_id"))
 		return
 	}
 
 	targetUserID := parts[1]
 	if a.notify.Stop(targetUserID) {
-		a.sendMessage(ctx, b, chatID, "Notifications stopped")
+		a.sendMessage(ctx, b, chatID, "✅ Notifications stopped")
 	} else {
-		a.sendMessage(ctx, b, chatID, "Notifications not active")
+		a.sendMessage(ctx, b, chatID, "⚠️ Notifications not active")
 	}
 }
 
@@ -622,13 +628,13 @@ func (a *App) debugStartHandler(ctx context.Context, b *bot.Bot, update *models.
 	chatID := update.Message.Chat.ID
 
 	if a.adminUser == "" || userID != a.adminUser {
-		a.sendMessage(ctx, b, chatID, "Unauthorized")
+		a.sendMessage(ctx, b, chatID, "🚫 Unauthorized")
 		return
 	}
 
 	parts := strings.Fields(update.Message.Text)
 	if len(parts) < 2 {
-		a.sendMessage(ctx, b, chatID, "Usage: `/debug_start <user_id> [chat_id]`")
+		a.sendMessage(ctx, b, chatID, "Usage: /debug_start "+code("user_id")+" [chat_id]")
 		return
 	}
 
@@ -638,7 +644,7 @@ func (a *App) debugStartHandler(ctx context.Context, b *bot.Bot, update *models.
 	if len(parts) >= 3 {
 		parsed, err := strconv.ParseInt(parts[2], 10, 64)
 		if err != nil {
-			a.sendMessage(ctx, b, chatID, "Usage: `/debug_start <user_id> [chat_id]`")
+			a.sendMessage(ctx, b, chatID, "Usage: /debug_start "+code("user_id")+" [chat_id]")
 			return
 		}
 		targetChatID = parsed
@@ -655,11 +661,11 @@ func (a *App) debugStartHandler(ctx context.Context, b *bot.Bot, update *models.
 			return
 		}
 		if len(chatIDs) == 0 {
-			a.sendMessage(ctx, b, chatID, "No notification channels found for user")
+			a.sendMessage(ctx, b, chatID, "⚠️ No notification channels found for user")
 			return
 		}
 		if len(chatIDs) > 1 {
-			a.sendMessage(ctx, b, chatID, "Multiple channels found; provide chat_id")
+			a.sendMessage(ctx, b, chatID, "⚠️ Multiple channels found; provide chat_id")
 			return
 		}
 		targetChatID = chatIDs[0]
@@ -671,20 +677,20 @@ func (a *App) debugStartHandler(ctx context.Context, b *bot.Bot, update *models.
 	if !a.notify.Start(a.appCtx, targetUserID, func(ctx context.Context) {
 		a.startNotify(ctx, targetUserID, targetChatID)
 	}) {
-		a.sendMessage(ctx, b, chatID, "Notifications already active")
+		a.sendMessage(ctx, b, chatID, "⚠️ Notifications already active")
 		return
 	}
 
-	a.sendMessage(ctx, b, chatID, "Notifications started")
+	a.sendMessage(ctx, b, chatID, "✅ Notifications started")
 }
 
 func (a *App) notifyStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	userID := fmt.Sprint(update.Message.From.ID)
 	chatID := update.Message.Chat.ID
 	if a.notify.Active(userID) {
-		a.sendMessage(ctx, b, chatID, "Subscribed")
+		a.sendMessage(ctx, b, chatID, "🔔 Subscribed")
 	} else {
-		a.sendMessage(ctx, b, chatID, "Not Subscribed")
+		a.sendMessage(ctx, b, chatID, "❌ Not subscribed")
 	}
 }
 
@@ -699,10 +705,10 @@ func (a *App) notifyStopHanlder(ctx context.Context, b *bot.Bot, update *models.
 			a.sendCommandError(ctx, b, chatID)
 			return
 		}
-		a.sendMessage(ctx, b, chatID, "Notifications Stopped")
+		a.sendMessage(ctx, b, chatID, "🔕 Notifications stopped")
 	} else {
 		log.Println("User not subscribed to notifications: ", userID)
-		a.sendMessage(ctx, b, chatID, "Not Subscribed")
+		a.sendMessage(ctx, b, chatID, "❌ Not subscribed")
 	}
 }
 
@@ -751,17 +757,25 @@ func (a *App) notifyDelegationsBalanceChanges(ctx context.Context, userID string
 			return
 		}
 		if new_balance != old_balance {
-			err = a.store.UpdateDelegationBalance(ctx, userID, delegationID, new_balance)
-
-			p := message.NewPrinter(language.AmericanEnglish)
-			if new_balance >= old_balance {
-				a.sendMessage(ctx, a.bot, chatID, p.Sprintf("`%s`: \\+%v ML", delegationID, new_balance-old_balance))
-			} else {
-				a.sendMessage(ctx, a.bot, chatID, p.Sprintf("`%s`: \\-%v ML", delegationID, new_balance-old_balance))
-			}
-			if err != nil {
+			if err = a.store.UpdateDelegationBalance(ctx, userID, delegationID, new_balance); err != nil {
 				log.Printf("Error updating balance: %v", err)
 				return
+			}
+			p := message.NewPrinter(language.AmericanEnglish)
+			if new_balance >= old_balance {
+				diff := new_balance - old_balance
+				msg := fmt.Sprintf("📈 Delegation balance increased\n%s: +%s (now %s)",
+					delegationLink(delegationID),
+					p.Sprintf("%v ML", diff),
+					p.Sprintf("%v ML", new_balance))
+				a.sendMessage(ctx, a.bot, chatID, msg)
+			} else {
+				diff := old_balance - new_balance
+				msg := fmt.Sprintf("📉 Delegation balance decreased\n%s: −%s (now %s)",
+					delegationLink(delegationID),
+					p.Sprintf("%v ML", diff),
+					p.Sprintf("%v ML", new_balance))
+				a.sendMessage(ctx, a.bot, chatID, msg)
 			}
 		}
 	})
@@ -790,18 +804,25 @@ func (a *App) notifyPoolsBalanceChanges(ctx context.Context, userID string, chat
 			return
 		}
 		if new_balance != old_balance {
-			err = a.store.UpdatePoolBalance(ctx, userID, poolID, new_balance)
-
-			p := message.NewPrinter(language.AmericanEnglish)
-			if new_balance >= old_balance {
-				a.sendMessage(ctx, a.bot, chatID, p.Sprintf("`%s`: \\+%v ML", poolID, new_balance-old_balance))
-			} else {
-				a.sendMessage(ctx, a.bot, chatID, p.Sprintf("`%s`: \\-%v ML", poolID, new_balance-old_balance))
-			}
-
-			if err != nil {
+			if err = a.store.UpdatePoolBalance(ctx, userID, poolID, new_balance); err != nil {
 				log.Printf("Error updating balance: %v", err)
 				return
+			}
+			p := message.NewPrinter(language.AmericanEnglish)
+			if new_balance >= old_balance {
+				diff := new_balance - old_balance
+				msg := fmt.Sprintf("📈 Pool balance increased\n%s: +%s (now %s)",
+					poolLink(poolID),
+					p.Sprintf("%v ML", diff),
+					p.Sprintf("%v ML", new_balance))
+				a.sendMessage(ctx, a.bot, chatID, msg)
+			} else {
+				diff := old_balance - new_balance
+				msg := fmt.Sprintf("📉 Pool balance decreased\n%s: −%s (now %s)",
+					poolLink(poolID),
+					p.Sprintf("%v ML", diff),
+					p.Sprintf("%v ML", new_balance))
+				a.sendMessage(ctx, a.bot, chatID, msg)
 			}
 		}
 	})
@@ -817,9 +838,10 @@ func (a *App) recoverPastNotifications(ctx context.Context) {
 	log.Println("Recovering notifications, total: ", len(notifications))
 
 	for _, notification := range notifications {
-		log.Printf("Recovering notification for user %v, on chan %v \n", notification.UserID, notification.ChatID)
-		a.notify.Start(ctx, notification.UserID, func(ctx context.Context) {
-			a.startNotify(ctx, notification.UserID, notification.ChatID)
+		userID, chatID := notification.UserID, notification.ChatID
+		log.Printf("Recovering notification for user %v, on chan %v \n", userID, chatID)
+		a.notify.Start(ctx, userID, func(ctx context.Context) {
+			a.startNotify(ctx, userID, chatID)
 		})
 	}
 }
